@@ -294,8 +294,10 @@
             <div class="room-box">
                 <div>Room Code</div>
                 <div class="room-code" id="roomCodeDisplay">----</div>
-                <div class="hint">Share this code with your friend</div>
+                <div class="hint">Share this code or the link below with your friend</div>
             </div>
+            <button class="btn secondary" id="btnShareLink" style="margin-top:4px;">Copy Share Link</button>
+            <div class="status" id="shareStatus" style="margin-top:6px;"></div>
             <div class="status" id="hostStatus">Waiting for opponent...</div>
             <button class="btn danger" id="btnCancelHost" style="margin-top:12px;">Cancel</button>
         </div>
@@ -766,15 +768,27 @@
             return code;
         }
 
+        const GAME_BASE_URL = 'https://joecool805.github.io/tank/tank_game.html';
+        let currentRoomCode = null;
+
+        function getShareLink(code) {
+            return GAME_BASE_URL + '?room=' + encodeURIComponent(code);
+        }
+
         function setupHost() {
             const code = generateRoomCode();
+            currentRoomCode = code;
             document.getElementById('roomCodeDisplay').textContent = code;
             document.getElementById('hostStatus').textContent = 'Creating room...';
             document.getElementById('hostStatus').className = 'status';
+            document.getElementById('shareStatus').textContent = '';
+            document.getElementById('shareStatus').className = 'status';
 
             peer = new Peer(code, { debug: 1 });
 
             peer.on('open', id => {
+                currentRoomCode = id;
+                document.getElementById('roomCodeDisplay').textContent = id;
                 document.getElementById('hostStatus').textContent = 'Waiting for opponent to join...';
                 document.getElementById('hostStatus').className = 'status success';
             });
@@ -795,6 +809,37 @@
                     document.getElementById('hostStatus').className = 'status error';
                 }
             });
+        }
+
+        async function copyShareLink() {
+            const code = currentRoomCode || document.getElementById('roomCodeDisplay').textContent;
+            if (!code || code === '----') {
+                document.getElementById('shareStatus').textContent = 'Room not ready yet';
+                document.getElementById('shareStatus').className = 'status error';
+                return;
+            }
+            const link = getShareLink(code);
+            const statusEl = document.getElementById('shareStatus');
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(link);
+                } else {
+                    // Fallback
+                    const ta = document.createElement('textarea');
+                    ta.value = link;
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                statusEl.textContent = 'Link copied! Send it to your friend.';
+                statusEl.className = 'status success';
+            } catch (e) {
+                statusEl.textContent = link;
+                statusEl.className = 'status success';
+            }
         }
 
         function setupJoin(code) {
@@ -1183,6 +1228,7 @@
         document.getElementById('btnCancelHost').onclick = () => {
             if (peer) peer.destroy();
             peer = null;
+            currentRoomCode = null;
             showMenu();
         };
         document.getElementById('btnCancelJoin').onclick = () => {
@@ -1203,6 +1249,7 @@
         document.getElementById('joinCode').addEventListener('keydown', e => {
             if (e.key === 'Enter') document.getElementById('btnDoJoin').click();
         });
+        document.getElementById('btnShareLink').onclick = () => copyShareLink();
         disconnectBtn.onclick = leaveGame;
 
         document.getElementById('btnPlayAgain').onclick = () => {
@@ -1213,10 +1260,32 @@
             leaveGame();
         };
 
+        // Auto-join from share link: ?room=CODE
+        function tryAutoJoinFromUrl() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const room = (params.get('room') || '').trim().toUpperCase();
+                if (room && room.length >= 4) {
+                    document.getElementById('btnLocal').style.display = 'none';
+                    document.getElementById('btnHost').style.display = 'none';
+                    document.getElementById('btnJoin').style.display = 'none';
+                    document.getElementById('joinPanel').style.display = 'block';
+                    document.getElementById('joinCode').value = room;
+                    document.getElementById('joinStatus').textContent = 'Joining room ' + room + '...';
+                    document.getElementById('joinStatus').className = 'status';
+                    mode = 'client';
+                    setupJoin(room);
+                    return true;
+                }
+            } catch (e) {}
+            return false;
+        }
+
         // Init
         detectTouchDevice();
         gameLoop();
         showMenu();
+        tryAutoJoinFromUrl();
     </script>
 </body>
 </html>
