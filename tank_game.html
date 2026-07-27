@@ -8,263 +8,123 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body {
-            background: #1a1a2e;
-            color: #eee;
+            background: #1a1a2e; color: #eee;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            height: 100%;
-            overflow: hidden;
-            touch-action: none;
-            -webkit-user-select: none;
-            user-select: none;
+            height: 100%; overflow: hidden; touch-action: none;
+            -webkit-user-select: none; user-select: none;
         }
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
+        body { display: flex; flex-direction: column; align-items: center; }
         h1 {
-            margin: 8px 0 4px;
-            font-size: clamp(1.2rem, 5vw, 1.9rem);
-            color: #00ff88;
-            text-shadow: 0 0 12px #00ff88;
-            flex-shrink: 0;
+            margin: 8px 0 4px; font-size: clamp(1.2rem, 5vw, 1.9rem);
+            color: #00ff88; text-shadow: 0 0 12px #00ff88; flex-shrink: 0;
         }
         #menu {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 14px;
-            margin-top: 30px;
-            max-width: 400px;
-            width: 90%;
-            padding: 0 10px;
+            display: flex; flex-direction: column; align-items: center;
+            gap: 14px; margin-top: 30px; max-width: 400px; width: 90%; padding: 0 10px;
         }
         .btn {
-            background: linear-gradient(135deg, #00c853, #00a844);
-            color: #fff;
-            border: none;
-            padding: 14px 24px;
-            font-size: 1.05rem;
-            border-radius: 12px;
-            cursor: pointer;
-            width: 100%;
-            font-weight: 600;
-            transition: transform 0.15s, box-shadow 0.15s;
-            box-shadow: 0 4px 15px rgba(0, 200, 83, 0.3);
-            -webkit-appearance: none;
+            background: linear-gradient(135deg, #00c853, #00a844); color: #fff;
+            border: none; padding: 14px 24px; font-size: 1.05rem; border-radius: 12px;
+            cursor: pointer; width: 100%; font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0, 200, 83, 0.3); -webkit-appearance: none;
         }
         .btn:active { transform: scale(0.97); }
-        .btn.secondary {
-            background: linear-gradient(135deg, #2196f3, #1976d2);
-            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
-        }
-        .btn.danger {
-            background: linear-gradient(135deg, #f44336, #d32f2f);
-            box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
-        }
+        .btn.secondary { background: linear-gradient(135deg, #2196f3, #1976d2); }
+        .btn.danger { background: linear-gradient(135deg, #f44336, #d32f2f); }
+        .btn:disabled { opacity: 0.55; cursor: default; }
         input[type="text"] {
-            width: 100%;
-            padding: 14px 16px;
-            font-size: 1.15rem;
-            border-radius: 10px;
-            border: 2px solid #333;
-            background: #16213e;
-            color: #fff;
-            text-align: center;
-            letter-spacing: 3px;
-            text-transform: uppercase;
+            width: 100%; padding: 14px 16px; font-size: 1.15rem; border-radius: 10px;
+            border: 2px solid #333; background: #16213e; color: #fff;
+            text-align: center; letter-spacing: 3px; text-transform: uppercase;
             -webkit-appearance: none;
         }
         input[type="text"]:focus { outline: none; border-color: #00ff88; }
-        .status {
-            font-size: 0.95rem;
-            color: #aaa;
-            text-align: center;
-            min-height: 22px;
-        }
+        .status { font-size: 0.95rem; color: #aaa; text-align: center; min-height: 22px; }
         .status.error { color: #ff5252; }
         .status.success { color: #00ff88; }
         #gameUI {
-            display: none;
-            width: 100%;
-            height: 100%;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-            overflow: hidden;
+            display: none; width: 100%; height: 100%; flex-direction: column;
+            align-items: center; position: relative; overflow: hidden;
         }
         .info {
-            display: flex;
-            gap: 12px;
-            margin: 4px 0;
-            font-size: clamp(0.75rem, 3vw, 0.95rem);
-            flex-wrap: wrap;
-            justify-content: center;
-            flex-shrink: 0;
-            padding: 0 8px;
+            display: flex; gap: 8px; margin: 4px 0; font-size: clamp(0.7rem, 2.8vw, 0.9rem);
+            flex-wrap: wrap; justify-content: center; flex-shrink: 0; padding: 0 8px;
         }
-        .player-info {
-            padding: 4px 10px;
-            border-radius: 6px;
-            background: #16213e;
-        }
-        .player1 { border: 2px solid #00aaff; }
-        .player2 { border: 2px solid #ff4444; }
+        .player-info { padding: 4px 8px; border-radius: 6px; background: #16213e; }
+        .p0 { border: 2px solid #00aaff; }
+        .p1 { border: 2px solid #ff4444; }
+        .p2 { border: 2px solid #44ff88; }
+        .p3 { border: 2px solid #ffaa00; }
         .canvas-wrap {
-            position: relative;
-            flex: 1;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 0;
-            overflow: hidden;
+            position: relative; flex: 1; width: 100%; display: flex;
+            justify-content: center; align-items: center; min-height: 0; overflow: hidden;
         }
         canvas {
-            border: 2px solid #0f3460;
-            border-radius: 6px;
-            background: #0f0f1a;
+            border: 2px solid #0f3460; border-radius: 6px; background: #0f0f1a;
             box-shadow: 0 0 20px rgba(0, 255, 136, 0.12);
-            display: block;
-            max-width: 100%;
-            max-height: 100%;
-            touch-action: none;
+            display: block; max-width: 100%; max-height: 100%; touch-action: none;
         }
         .controls {
-            margin-top: 4px;
-            display: flex;
-            gap: 16px;
-            font-size: 0.8rem;
-            color: #aaa;
-            flex-wrap: wrap;
-            justify-content: center;
-            flex-shrink: 0;
-            padding: 0 8px 4px;
+            margin-top: 4px; display: flex; gap: 12px; font-size: 0.8rem; color: #aaa;
+            flex-wrap: wrap; justify-content: center; flex-shrink: 0; padding: 0 8px 4px;
         }
-        .controls div {
-            background: #16213e;
-            padding: 6px 12px;
-            border-radius: 6px;
-        }
+        .controls div { background: #16213e; padding: 6px 12px; border-radius: 6px; }
         .controls strong { color: #00ff88; }
         .message {
-            position: absolute;
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: clamp(1.4rem, 6vw, 2.2rem);
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 0 20px #00ff88;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s;
-            z-index: 30;
-            text-align: center;
-            padding: 0 12px;
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            font-size: clamp(1.3rem, 5.5vw, 2.1rem); font-weight: bold; color: #fff;
+            text-shadow: 0 0 20px #00ff88; pointer-events: none; opacity: 0;
+            transition: opacity 0.3s; z-index: 30; text-align: center; padding: 0 12px;
         }
         .message.show { opacity: 1; }
         .room-box {
-            background: #16213e;
-            padding: 14px 20px;
-            border-radius: 12px;
-            border: 2px solid #00ff88;
-            text-align: center;
-            margin: 8px 0;
-            width: 100%;
+            background: #16213e; padding: 14px 20px; border-radius: 12px;
+            border: 2px solid #00ff88; text-align: center; margin: 8px 0; width: 100%;
         }
         .room-code {
-            font-size: 1.8rem;
-            font-weight: bold;
-            letter-spacing: 5px;
-            color: #00ff88;
-            margin: 6px 0;
+            font-size: 1.8rem; font-weight: bold; letter-spacing: 5px;
+            color: #00ff88; margin: 6px 0;
         }
         .hint { font-size: 0.8rem; color: #888; margin-top: 4px; }
         #disconnectBtn { display: none; margin: 6px 0; max-width: 200px; padding: 10px; font-size: 0.95rem; }
 
-        /* ===== MOBILE TOUCH CONTROLS ===== */
         #touchControls {
-            display: none;
-            position: absolute;
-            inset: 0;
-            pointer-events: none;
-            z-index: 15;
+            display: none; position: absolute; inset: 0; pointer-events: none; z-index: 15;
         }
         #touchControls.active { display: block; }
-
         .joystick-zone {
-            position: absolute;
-            bottom: 18px;
-            left: 16px;
-            width: 130px;
-            height: 130px;
-            pointer-events: auto;
+            position: absolute; bottom: 18px; left: 16px;
+            width: 130px; height: 130px; pointer-events: auto;
         }
         .joystick-base {
-            width: 130px;
-            height: 130px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.08);
-            border: 2px solid rgba(255,255,255,0.22);
-            position: relative;
-            touch-action: none;
+            width: 130px; height: 130px; border-radius: 50%;
+            background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.22);
+            position: relative; touch-action: none;
         }
         .joystick-stick {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            background: rgba(0, 255, 136, 0.55);
-            border: 2px solid rgba(0, 255, 136, 0.9);
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            width: 56px; height: 56px; border-radius: 50%;
+            background: rgba(0, 255, 136, 0.55); border: 2px solid rgba(0, 255, 136, 0.9);
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             pointer-events: none;
-            transition: background 0.1s;
         }
-        .joystick-stick.active {
-            background: rgba(0, 255, 136, 0.85);
-        }
-
+        .joystick-stick.active { background: rgba(0, 255, 136, 0.85); }
         .shoot-btn {
-            position: absolute;
-            bottom: 28px;
-            right: 20px;
-            width: 88px;
-            height: 88px;
-            border-radius: 50%;
-            background: rgba(255, 60, 60, 0.45);
-            border: 3px solid rgba(255, 80, 80, 0.9);
-            color: #fff;
-            font-size: 0.95rem;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            pointer-events: auto;
-            touch-action: none;
-            user-select: none;
+            position: absolute; bottom: 28px; right: 20px; width: 88px; height: 88px;
+            border-radius: 50%; background: rgba(255, 60, 60, 0.45);
+            border: 3px solid rgba(255, 80, 80, 0.9); color: #fff; font-size: 0.95rem;
+            font-weight: bold; display: flex; align-items: center; justify-content: center;
+            pointer-events: auto; touch-action: none; user-select: none;
             box-shadow: 0 0 18px rgba(255, 50, 50, 0.35);
-            transition: background 0.1s, transform 0.1s;
         }
         .shoot-btn:active, .shoot-btn.pressed {
-            background: rgba(255, 40, 40, 0.8);
-            transform: scale(0.92);
+            background: rgba(255, 40, 40, 0.8); transform: scale(0.92);
         }
-
         .mobile-only-hint {
-            display: none;
-            font-size: 0.75rem;
-            color: #777;
-            text-align: center;
-            margin-top: 2px;
+            display: none; font-size: 0.75rem; color: #777; text-align: center; margin-top: 2px;
         }
-
-        /* Landscape mobile tweaks */
         @media (max-height: 500px) and (orientation: landscape) {
             h1 { font-size: 1rem; margin: 2px 0; }
-            .info { font-size: 0.7rem; gap: 8px; margin: 2px 0; }
+            .info { font-size: 0.65rem; gap: 6px; margin: 2px 0; }
             .joystick-zone { width: 110px; height: 110px; bottom: 10px; left: 10px; }
             .joystick-base { width: 110px; height: 110px; }
             .joystick-stick { width: 46px; height: 46px; }
@@ -272,7 +132,6 @@
             .controls { display: none; }
             #disconnectBtn { padding: 6px 12px; font-size: 0.8rem; margin: 2px 0; }
         }
-
         @media (max-width: 600px) {
             .controls { display: none; }
             .mobile-only-hint { display: block; }
@@ -283,21 +142,21 @@
 <body>
     <h1>Tank Battle</h1>
 
-    <!-- MENU -->
     <div id="menu">
-        <button class="btn" id="btnLocal">Local Multiplayer (Same Keyboard)</button>
-        <button class="btn secondary" id="btnHost">Host Online Game</button>
+        <button class="btn" id="btnLocal">Local 2-Player (Same Keyboard)</button>
+        <button class="btn secondary" id="btnHost">Host Online Game (up to 4)</button>
         <button class="btn secondary" id="btnJoin">Join Online Game</button>
 
         <div id="hostPanel" style="display:none; width:100%;">
             <div class="room-box">
                 <div>Room Code</div>
                 <div class="room-code" id="roomCodeDisplay">----</div>
-                <div class="hint">Share this code or the link below with your friend</div>
+                <div class="hint">Share code or link — game starts at 2 players</div>
             </div>
             <button class="btn secondary" id="btnShareLink" style="margin-top:4px;">Copy Share Link</button>
             <div class="status" id="shareStatus" style="margin-top:6px;"></div>
-            <div class="status" id="hostStatus">Waiting for opponent...</div>
+            <div class="status" id="hostStatus">Waiting for players...</div>
+            <div class="status" id="playerCountStatus">Players: 1 / 4</div>
             <button class="btn danger" id="btnCancelHost" style="margin-top:12px;">Cancel</button>
         </div>
 
@@ -309,27 +168,24 @@
         </div>
     </div>
 
-    <!-- GAME UI -->
     <div id="gameUI">
-        <div class="info">
-            <div class="player-info player1">P1 (Blue): <span id="score1">0</span></div>
-            <div class="player-info player2">P2 (Red): <span id="score2">0</span></div>
+        <div class="info" id="scoreBoard">
+            <div class="player-info p0" id="scoreBox0">P1: <span id="score0">0</span></div>
+            <div class="player-info p1" id="scoreBox1">P2: <span id="score1">0</span></div>
+            <div class="player-info p2" id="scoreBox2" style="display:none;">P3: <span id="score2">0</span></div>
+            <div class="player-info p3" id="scoreBox3" style="display:none;">P4: <span id="score3">0</span></div>
             <div class="player-info" id="roundLabel" style="border:2px solid #00ff88;">Round 1 / 3</div>
             <div class="player-info" id="modeLabel" style="border:2px solid #666;">Local</div>
         </div>
         <div class="canvas-wrap">
             <canvas id="gameCanvas" width="800" height="500"></canvas>
             <div class="message" id="message"></div>
-
-            <!-- Match over / Play Again overlay -->
             <div id="matchOverlay" style="display:none; position:absolute; inset:0; background:rgba(0,0,0,0.72); z-index:25; flex-direction:column; align-items:center; justify-content:center; gap:16px; pointer-events:auto;">
-                <div id="matchResultText" style="font-size:clamp(1.4rem,6vw,2.2rem); font-weight:bold; color:#fff; text-shadow:0 0 20px #00ff88; text-align:center; padding:0 16px;"></div>
-                <div style="font-size:1rem; color:#aaa;" id="matchScoreText"></div>
+                <div id="matchResultText" style="font-size:clamp(1.3rem,5.5vw,2.1rem); font-weight:bold; color:#fff; text-shadow:0 0 20px #00ff88; text-align:center; padding:0 16px;"></div>
+                <div style="font-size:0.95rem; color:#aaa;" id="matchScoreText"></div>
                 <button class="btn" id="btnPlayAgain" style="max-width:260px;">Play Again</button>
                 <button class="btn danger" id="btnMatchMenu" style="max-width:260px;">Back to Menu</button>
             </div>
-
-            <!-- Touch Controls Overlay -->
             <div id="touchControls">
                 <div class="joystick-zone" id="joystickZone">
                     <div class="joystick-base" id="joystickBase">
@@ -339,32 +195,22 @@
                 <div class="shoot-btn" id="shootBtn">FIRE</div>
             </div>
         </div>
-        <div class="controls" id="controlsInfo">
-            <div>
-                <strong>Player 1 (Blue)</strong><br>
-                Move: WASD &nbsp; Shoot: SPACE
-            </div>
-            <div>
-                <strong>Player 2 (Red)</strong><br>
-                Move: Arrow Keys &nbsp; Shoot: ENTER
-            </div>
-        </div>
-        <p class="hint" id="restartHint">Best of 3 — first to win 2 rounds wins the match</p>
+        <div class="controls" id="controlsInfo"></div>
+        <p class="hint" id="restartHint">Best of 3 — last tank standing wins the round</p>
         <p class="mobile-only-hint">Joystick = move & turn &nbsp;|&nbsp; FIRE = shoot</p>
         <button class="btn danger" id="disconnectBtn">Leave Game</button>
     </div>
 
     <script>
-        // ==================== CONSTANTS ====================
-        const TANK_SIZE = 28;
-        const BULLET_SPEED = 7;
-        const TANK_SPEED = 2.8;
-        const ROT_SPEED = 0.055;
-        const FIRE_COOLDOWN = 400;
-        const BULLET_RADIUS = 4;
-        const WALL_THICKNESS = 20;
-        const TICK_RATE = 1000 / 30;
-
+        const TANK_SIZE = 28, BULLET_SPEED = 7, TANK_SPEED = 2.8, ROT_SPEED = 0.055;
+        const FIRE_COOLDOWN = 400, BULLET_RADIUS = 4, WALL_THICKNESS = 20, TICK_RATE = 1000 / 30;
+        const MAX_PLAYERS = 4;
+        const PLAYER_COLORS = ['#00aaff', '#ff4444', '#44ff88', '#ffaa00'];
+        const PLAYER_NAMES = ['P1 Blue', 'P2 Red', 'P3 Green', 'P4 Orange'];
+        const SPAWNS = [
+            { x: 100, y: 120 }, { x: 700, y: 120 },
+            { x: 100, y: 380 }, { x: 700, y: 380 }
+        ];
         const walls = [
             { x: 0, y: 0, w: 800, h: WALL_THICKNESS },
             { x: 0, y: 500 - WALL_THICKNESS, w: 800, h: WALL_THICKNESS },
@@ -377,56 +223,56 @@
             { x: 380, y: 200, w: 40, h: 100 },
         ];
 
-        // ==================== STATE ====================
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const messageEl = document.getElementById('message');
-        const score1El = document.getElementById('score1');
-        const score2El = document.getElementById('score2');
         const modeLabel = document.getElementById('modeLabel');
         const controlsInfo = document.getElementById('controlsInfo');
         const restartHint = document.getElementById('restartHint');
         const disconnectBtn = document.getElementById('disconnectBtn');
         const touchControls = document.getElementById('touchControls');
 
-        let scores = [0, 0]; // round wins (best of 3)
-        let gameOver = false;   // current round over
-        let matchOver = false;  // match finished (someone won 2 rounds)
-        let currentRound = 1;
+        let scores = [0, 0, 0, 0];
+        let gameOver = false, matchOver = false, currentRound = 1;
         let roundTransitionTimer = null;
-        let mode = null;
+        let mode = null; // 'local' | 'host' | 'client'
         let peer = null;
-        let conn = null;
-        let isConnected = false;
-        let myTankIndex = 0;
+        let mySlot = 0;
+        let gameStarted = false;
         let lastNetworkSend = 0;
-        let remoteInputs = { up: false, down: false, left: false, right: false, shoot: false };
         let localKeys = {};
-
-        // Touch input state
         let touchInput = { up: false, down: false, left: false, right: false, shoot: false };
         let isTouchDevice = false;
 
-        // ==================== TANK CLASS ====================
+        // Online: host keeps slots + connections
+        // slots[i] = { active, peerId, conn, inputs, tank }
+        let slots = [];
+        let clientConn = null; // client -> host connection
+
         class Tank {
-            constructor(x, y, color, index) {
-                this.x = x;
-                this.y = y;
-                this.angle = 0;
-                this.color = color;
-                this.index = index;
+            constructor(slot) {
+                const s = SPAWNS[slot];
+                this.slot = slot;
+                this.x = s.x; this.y = s.y;
+                this.angle = slot % 2 === 0 ? 0 : Math.PI;
+                this.color = PLAYER_COLORS[slot];
                 this.bullets = [];
                 this.lastShot = 0;
                 this.alive = true;
                 this.radius = TANK_SIZE / 2;
             }
-
-            update(inputs, otherTank) {
-                if (!this.alive || gameOver) return;
-
+            reset() {
+                const s = SPAWNS[this.slot];
+                this.x = s.x; this.y = s.y;
+                this.angle = this.slot % 2 === 0 ? 0 : Math.PI;
+                this.bullets = [];
+                this.lastShot = 0;
+                this.alive = true;
+            }
+            update(inputs, others) {
+                if (!this.alive || gameOver || matchOver) return;
                 if (inputs.left) this.angle -= ROT_SPEED;
                 if (inputs.right) this.angle += ROT_SPEED;
-
                 let moveX = 0, moveY = 0;
                 if (inputs.up) {
                     moveX = Math.cos(this.angle) * TANK_SPEED;
@@ -436,26 +282,18 @@
                     moveX = -Math.cos(this.angle) * TANK_SPEED * 0.7;
                     moveY = -Math.sin(this.angle) * TANK_SPEED * 0.7;
                 }
-
-                let newX = this.x + moveX;
-                let newY = this.y + moveY;
-
-                if (!this.collidesWithWalls(newX, newY) && !this.collidesWithTank(newX, newY, otherTank)) {
-                    this.x = newX;
-                    this.y = newY;
-                } else {
-                    if (!this.collidesWithWalls(this.x + moveX, this.y) && !this.collidesWithTank(this.x + moveX, this.y, otherTank)) {
-                        this.x += moveX;
-                    } else if (!this.collidesWithWalls(this.x, this.y + moveY) && !this.collidesWithTank(this.x, this.y + moveY, otherTank)) {
-                        this.y += moveY;
-                    }
+                const nx = this.x + moveX, ny = this.y + moveY;
+                if (!this.hitsWall(nx, ny) && !this.hitsTank(nx, ny, others)) {
+                    this.x = nx; this.y = ny;
+                } else if (!this.hitsWall(this.x + moveX, this.y) && !this.hitsTank(this.x + moveX, this.y, others)) {
+                    this.x += moveX;
+                } else if (!this.hitsWall(this.x, this.y + moveY) && !this.hitsTank(this.x, this.y + moveY, others)) {
+                    this.y += moveY;
                 }
-
                 if (inputs.shoot && Date.now() - this.lastShot > FIRE_COOLDOWN) {
                     this.shoot();
                     this.lastShot = Date.now();
                 }
-
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const b = this.bullets[i];
                     b.x += Math.cos(b.angle) * BULLET_SPEED;
@@ -465,26 +303,27 @@
                     }
                 }
             }
-
             shoot() {
-                const tipX = this.x + Math.cos(this.angle) * (this.radius + 6);
-                const tipY = this.y + Math.sin(this.angle) * (this.radius + 6);
-                this.bullets.push({ x: tipX, y: tipY, angle: this.angle });
+                this.bullets.push({
+                    x: this.x + Math.cos(this.angle) * (this.radius + 6),
+                    y: this.y + Math.sin(this.angle) * (this.radius + 6),
+                    angle: this.angle
+                });
             }
-
-            collidesWithWalls(nx, ny) {
+            hitsWall(nx, ny) {
                 for (const w of walls) {
                     if (nx + this.radius > w.x && nx - this.radius < w.x + w.w &&
                         ny + this.radius > w.y && ny - this.radius < w.y + w.h) return true;
                 }
                 return false;
             }
-
-            collidesWithTank(nx, ny, other) {
-                if (!other || !other.alive) return false;
-                return Math.hypot(nx - other.x, ny - other.y) < this.radius + other.radius - 2;
+            hitsTank(nx, ny, others) {
+                for (const o of others) {
+                    if (!o || !o.alive || o.slot === this.slot) continue;
+                    if (Math.hypot(nx - o.x, ny - o.y) < this.radius + o.radius - 2) return true;
+                }
+                return false;
             }
-
             bulletHitsWall(b) {
                 for (const w of walls) {
                     if (b.x + BULLET_RADIUS > w.x && b.x - BULLET_RADIUS < w.x + w.w &&
@@ -492,20 +331,22 @@
                 }
                 return false;
             }
-
-            checkHit(other) {
-                if (!this.alive || !other.alive) return false;
+            // returns slot of player hit, or -1
+            checkHits(others) {
+                if (!this.alive) return -1;
                 for (let i = this.bullets.length - 1; i >= 0; i--) {
                     const b = this.bullets[i];
-                    if (Math.hypot(b.x - other.x, b.y - other.y) < other.radius + BULLET_RADIUS) {
-                        other.alive = false;
-                        this.bullets.splice(i, 1);
-                        return true;
+                    for (const o of others) {
+                        if (!o || !o.alive || o.slot === this.slot) continue;
+                        if (Math.hypot(b.x - o.x, b.y - o.y) < o.radius + BULLET_RADIUS) {
+                            o.alive = false;
+                            this.bullets.splice(i, 1);
+                            return o.slot;
+                        }
                     }
                 }
-                return false;
+                return -1;
             }
-
             draw() {
                 if (!this.alive) {
                     ctx.save();
@@ -513,11 +354,7 @@
                     ctx.rotate(this.angle);
                     ctx.fillStyle = '#333';
                     ctx.fillRect(-TANK_SIZE/2, -TANK_SIZE/2, TANK_SIZE, TANK_SIZE);
-                    ctx.strokeStyle = '#555';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(-TANK_SIZE/2, -TANK_SIZE/2, TANK_SIZE, TANK_SIZE);
-                    ctx.strokeStyle = '#ff0000';
-                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 3;
                     ctx.beginPath();
                     ctx.moveTo(-10, -10); ctx.lineTo(10, 10);
                     ctx.moveTo(10, -10); ctx.lineTo(-10, 10);
@@ -525,31 +362,19 @@
                     ctx.restore();
                     return;
                 }
-
                 ctx.save();
                 ctx.translate(this.x, this.y);
                 ctx.rotate(this.angle);
-
                 ctx.fillStyle = this.color;
                 ctx.fillRect(-TANK_SIZE/2, -TANK_SIZE/2, TANK_SIZE, TANK_SIZE);
-
                 ctx.fillStyle = '#222';
                 ctx.fillRect(-TANK_SIZE/2 - 3, -TANK_SIZE/2, 4, TANK_SIZE);
                 ctx.fillRect(TANK_SIZE/2 - 1, -TANK_SIZE/2, 4, TANK_SIZE);
-
-                ctx.fillStyle = this.color === '#00aaff' ? '#0088cc' : '#cc2222';
-                ctx.beginPath();
-                ctx.arc(0, 0, 8, 0, Math.PI * 2);
-                ctx.fill();
-
                 ctx.fillStyle = '#111';
                 ctx.fillRect(6, -3, 16, 6);
-
                 ctx.fillStyle = 'rgba(255,255,255,0.2)';
                 ctx.fillRect(-TANK_SIZE/2 + 2, -TANK_SIZE/2 + 2, TANK_SIZE - 8, 6);
-
                 ctx.restore();
-
                 for (const b of this.bullets) {
                     ctx.beginPath();
                     ctx.arc(b.x, b.y, BULLET_RADIUS + 2, 0, Math.PI * 2);
@@ -561,15 +386,13 @@
                     ctx.fill();
                 }
             }
-
             toState() {
                 return {
-                    x: this.x, y: this.y, angle: this.angle,
+                    slot: this.slot, x: this.x, y: this.y, angle: this.angle,
                     alive: this.alive,
                     bullets: this.bullets.map(b => ({ x: b.x, y: b.y, angle: b.angle }))
                 };
             }
-
             fromState(s) {
                 this.x = s.x; this.y = s.y; this.angle = s.angle;
                 this.alive = s.alive;
@@ -577,82 +400,112 @@
             }
         }
 
-        let tank1 = null, tank2 = null;
-
-        function createTanks() {
-            tank1 = new Tank(100, 250, '#00aaff', 0);
-            tank2 = new Tank(700, 250, '#ff4444', 1);
+        function emptyInputs() {
+            return { up: false, down: false, left: false, right: false, shoot: false };
         }
 
-        // ==================== TOUCH CONTROLS (Joystick) ====================
+        function initSlots() {
+            slots = [];
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                slots.push({
+                    active: false,
+                    peerId: null,
+                    conn: null,
+                    inputs: emptyInputs(),
+                    tank: new Tank(i)
+                });
+            }
+        }
+
+        function activeSlots() {
+            return slots.filter(s => s.active);
+        }
+
+        function activeTanks() {
+            return activeSlots().map(s => s.tank);
+        }
+
+        function countActive() {
+            return activeSlots().length;
+        }
+
+        function firstFreeSlot() {
+            for (let i = 0; i < MAX_PLAYERS; i++) if (!slots[i].active) return i;
+            return -1;
+        }
+
+        function updateScoreBoard() {
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                const box = document.getElementById('scoreBox' + i);
+                const el = document.getElementById('score' + i);
+                if (!box || !el) continue;
+                el.textContent = scores[i];
+                const show = mode === 'local' ? i < 2 : slots[i] && slots[i].active;
+                // For client, slots may not be fully known — use scores presence from state
+                if (mode === 'client') {
+                    box.style.display = (i === 0 || i === 1 || scores[i] > 0 || (slots[i] && slots[i].active)) ? '' : (i < 2 ? '' : 'none');
+                } else {
+                    box.style.display = show || i < 2 ? '' : 'none';
+                }
+                if (mode !== 'local' && slots[i] && slots[i].active) box.style.display = '';
+            }
+        }
+
+        function updateRoundLabel() {
+            const el = document.getElementById('roundLabel');
+            if (!el) return;
+            el.textContent = matchOver ? 'Match Over' : ('Round ' + currentRound + ' / 3');
+        }
+
+        function updatePlayerCountUI() {
+            const el = document.getElementById('playerCountStatus');
+            if (el) el.textContent = 'Players: ' + countActive() + ' / ' + MAX_PLAYERS;
+        }
+
+        // ==================== TOUCH JOYSTICK ====================
         const shootBtn = document.getElementById('shootBtn');
         const joystickZone = document.getElementById('joystickZone');
         const joystickBase = document.getElementById('joystickBase');
         const joystickStick = document.getElementById('joystickStick');
-
-        let joyTouchId = null;
-        let shootTouchId = null;
-        let mouseJoy = false;
+        let joyTouchId = null, shootTouchId = null, mouseJoy = false;
 
         function detectTouchDevice() {
             isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
             return isTouchDevice;
         }
-
         function updateTouchControlsVisibility() {
-            if (mode && (isTouchDevice || window.innerWidth < 700)) {
+            if (mode && gameStarted && (isTouchDevice || window.innerWidth < 700)) {
                 touchControls.classList.add('active');
             } else {
                 touchControls.classList.remove('active');
             }
         }
-
         function handleJoystick(clientX, clientY) {
             const rect = joystickBase.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            let dx = clientX - centerX;
-            let dy = clientY - centerY;
+            const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+            let dx = clientX - cx, dy = clientY - cy;
             const maxDist = rect.width / 2 - 10;
             const dist = Math.hypot(dx, dy);
-
-            if (dist > maxDist) {
-                dx = (dx / dist) * maxDist;
-                dy = (dy / dist) * maxDist;
-            }
-
+            if (dist > maxDist) { dx = dx / dist * maxDist; dy = dy / dist * maxDist; }
             joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
             joystickStick.classList.add('active');
-
-            const deadzone = 12;
-            const nx = dist > deadzone ? dx / maxDist : 0;
-            const ny = dist > deadzone ? dy / maxDist : 0;
-
-            touchInput.left = false;
-            touchInput.right = false;
-            touchInput.up = false;
-            touchInput.down = false;
-
-            if (dist > deadzone) {
+            const dead = 12;
+            const nx = dist > dead ? dx / maxDist : 0;
+            const ny = dist > dead ? dy / maxDist : 0;
+            touchInput.left = touchInput.right = touchInput.up = touchInput.down = false;
+            if (dist > dead) {
                 if (nx < -0.3) touchInput.left = true;
                 if (nx > 0.3) touchInput.right = true;
-                if (ny < -0.25) touchInput.up = true;   // stick up = forward
-                if (ny > 0.4) touchInput.down = true;   // stick down = reverse
+                if (ny < -0.25) touchInput.up = true;
+                if (ny > 0.4) touchInput.down = true;
             }
         }
-
         function resetTouchDirs() {
             joystickStick.style.transform = 'translate(-50%, -50%)';
             joystickStick.classList.remove('active');
-            touchInput.up = false;
-            touchInput.down = false;
-            touchInput.left = false;
-            touchInput.right = false;
-            joyTouchId = null;
-            mouseJoy = false;
+            touchInput.up = touchInput.down = touchInput.left = touchInput.right = false;
+            joyTouchId = null; mouseJoy = false;
         }
-
-        // Joystick touch
         joystickZone.addEventListener('touchstart', e => {
             e.preventDefault();
             if (joyTouchId !== null) return;
@@ -660,109 +513,54 @@
             joyTouchId = t.identifier;
             handleJoystick(t.clientX, t.clientY);
         }, { passive: false });
-
         joystickZone.addEventListener('touchmove', e => {
             e.preventDefault();
             for (const t of e.changedTouches) {
-                if (t.identifier === joyTouchId) {
-                    handleJoystick(t.clientX, t.clientY);
-                    break;
-                }
+                if (t.identifier === joyTouchId) { handleJoystick(t.clientX, t.clientY); break; }
             }
         }, { passive: false });
-
-        function endJoyTouch(e) {
+        function endJoy(e) {
             for (const t of e.changedTouches) {
-                if (t.identifier === joyTouchId) {
-                    resetTouchDirs();
-                    break;
-                }
+                if (t.identifier === joyTouchId) { resetTouchDirs(); break; }
             }
         }
-        joystickZone.addEventListener('touchend', endJoyTouch, { passive: false });
-        joystickZone.addEventListener('touchcancel', endJoyTouch, { passive: false });
-
-        // Joystick mouse (desktop testing)
-        joystickZone.addEventListener('mousedown', e => {
-            mouseJoy = true;
-            handleJoystick(e.clientX, e.clientY);
-        });
-        window.addEventListener('mousemove', e => {
-            if (mouseJoy) handleJoystick(e.clientX, e.clientY);
-        });
-
-        // Shoot button
+        joystickZone.addEventListener('touchend', endJoy, { passive: false });
+        joystickZone.addEventListener('touchcancel', endJoy, { passive: false });
+        joystickZone.addEventListener('mousedown', e => { mouseJoy = true; handleJoystick(e.clientX, e.clientY); });
+        window.addEventListener('mousemove', e => { if (mouseJoy) handleJoystick(e.clientX, e.clientY); });
         shootBtn.addEventListener('touchstart', e => {
             e.preventDefault();
             if (shootTouchId !== null) return;
-            const t = e.changedTouches[0];
-            shootTouchId = t.identifier;
+            shootTouchId = e.changedTouches[0].identifier;
             touchInput.shoot = true;
             shootBtn.classList.add('pressed');
         }, { passive: false });
-
-        function endShootTouch(e) {
+        function endShoot(e) {
             for (const t of e.changedTouches) {
                 if (t.identifier === shootTouchId) {
-                    touchInput.shoot = false;
-                    shootTouchId = null;
-                    shootBtn.classList.remove('pressed');
-                    break;
+                    touchInput.shoot = false; shootTouchId = null;
+                    shootBtn.classList.remove('pressed'); break;
                 }
             }
         }
-        shootBtn.addEventListener('touchend', endShootTouch, { passive: false });
-        shootBtn.addEventListener('touchcancel', endShootTouch, { passive: false });
-
-        shootBtn.addEventListener('mousedown', () => {
-            touchInput.shoot = true;
-            shootBtn.classList.add('pressed');
-        });
+        shootBtn.addEventListener('touchend', endShoot, { passive: false });
+        shootBtn.addEventListener('touchcancel', endShoot, { passive: false });
+        shootBtn.addEventListener('mousedown', () => { touchInput.shoot = true; shootBtn.classList.add('pressed'); });
         window.addEventListener('mouseup', () => {
-            touchInput.shoot = false;
-            shootBtn.classList.remove('pressed');
+            touchInput.shoot = false; shootBtn.classList.remove('pressed');
             if (mouseJoy) resetTouchDirs();
         });
+        document.body.addEventListener('touchmove', e => { if (mode && gameStarted) e.preventDefault(); }, { passive: false });
 
-        // Prevent page scroll / zoom while playing
-        document.body.addEventListener('touchmove', e => {
-            if (mode) e.preventDefault();
-        }, { passive: false });
-
-        // ==================== KEYBOARD INPUT ====================
+        // ==================== KEYBOARD ====================
         window.addEventListener('keydown', e => {
             localKeys[e.code] = true;
-            if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-                e.preventDefault();
-            }
-            if (e.code === 'KeyR' && matchOver && (mode === 'local' || mode === 'host')) {
-                startNewMatch(true);
-            }
+            if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+            if (e.code === 'KeyR' && matchOver && (mode === 'local' || mode === 'host')) startNewMatch(true);
         });
-        window.addEventListener('keyup', e => {
-            localKeys[e.code] = false;
-        });
+        window.addEventListener('keyup', e => { localKeys[e.code] = false; });
 
-        function getLocalInputs() {
-            if (mode === 'local') {
-                return {
-                    p1: {
-                        up: !!localKeys['KeyW'] || touchInput.up,
-                        down: !!localKeys['KeyS'] || touchInput.down,
-                        left: !!localKeys['KeyA'] || touchInput.left,
-                        right: !!localKeys['KeyD'] || touchInput.right,
-                        shoot: !!localKeys['Space'] || touchInput.shoot
-                    },
-                    p2: {
-                        up: !!localKeys['ArrowUp'],
-                        down: !!localKeys['ArrowDown'],
-                        left: !!localKeys['ArrowLeft'],
-                        right: !!localKeys['ArrowRight'],
-                        shoot: !!localKeys['Enter']
-                    }
-                };
-            }
-            // Online or single-player style: merge keyboard + touch
+        function getMergedInputs() {
             return {
                 up: !!localKeys['KeyW'] || !!localKeys['ArrowUp'] || touchInput.up,
                 down: !!localKeys['KeyS'] || !!localKeys['ArrowDown'] || touchInput.down,
@@ -771,123 +569,92 @@
                 shoot: !!localKeys['Space'] || !!localKeys['Enter'] || touchInput.shoot
             };
         }
-
-        // ==================== NETWORK ====================
-        function generateRoomCode() {
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            let code = '';
-            for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
-            return code;
+        function getLocalP2Inputs() {
+            return {
+                up: !!localKeys['ArrowUp'], down: !!localKeys['ArrowDown'],
+                left: !!localKeys['ArrowLeft'], right: !!localKeys['ArrowRight'],
+                shoot: !!localKeys['Enter']
+            };
+        }
+        function getLocalP1Inputs() {
+            return {
+                up: !!localKeys['KeyW'] || touchInput.up,
+                down: !!localKeys['KeyS'] || touchInput.down,
+                left: !!localKeys['KeyA'] || touchInput.left,
+                right: !!localKeys['KeyD'] || touchInput.right,
+                shoot: !!localKeys['Space'] || touchInput.shoot
+            };
         }
 
+        // ==================== NETWORK ====================
         const GAME_BASE_URL = 'https://joecool805.github.io/tank/tank_game.html';
         const PEER_OPTS = {
-            host: '0.peerjs.com',
-            port: 443,
-            path: '/',
-            secure: true,
-            debug: 1,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' }
-                ]
-            }
+            host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 1,
+            config: { iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]}
         };
-        // Room code never auto-changes while hosting. Persisted so app-switch survives.
         const ROOM_CODE_LOCK_MS = 300000;
         const ROOM_STORAGE_KEY = 'tank_battle_room_v1';
         let currentRoomCode = null;
-        let roomCodeLockedUntil = 0;
         let hostRecreating = false;
         let hostSameCodeAttempts = 0;
         let hostKeepAliveTimer = null;
         let joinRetryCount = 0;
         const MAX_JOIN_RETRIES = 20;
 
-        function getShareLink(code) {
-            return GAME_BASE_URL + '?room=' + encodeURIComponent(code);
+        function getShareLink(code) { return GAME_BASE_URL + '?room=' + encodeURIComponent(code); }
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+            return code;
         }
-
         function saveRoomToStorage(code) {
-            try {
-                localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
-                    code: code,
-                    until: Date.now() + ROOM_CODE_LOCK_MS
-                }));
-            } catch (e) {}
+            try { localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({ code, until: Date.now() + ROOM_CODE_LOCK_MS })); } catch (e) {}
         }
-
         function loadRoomFromStorage() {
             try {
-                const raw = localStorage.getItem(ROOM_STORAGE_KEY);
-                if (!raw) return null;
-                const data = JSON.parse(raw);
-                if (data && data.code && data.until && Date.now() < data.until) {
-                    return String(data.code).toUpperCase();
-                }
+                const data = JSON.parse(localStorage.getItem(ROOM_STORAGE_KEY) || 'null');
+                if (data && data.code && data.until > Date.now()) return String(data.code).toUpperCase();
                 localStorage.removeItem(ROOM_STORAGE_KEY);
             } catch (e) {}
             return null;
         }
-
-        function clearRoomStorage() {
-            try { localStorage.removeItem(ROOM_STORAGE_KEY); } catch (e) {}
-        }
-
+        function clearRoomStorage() { try { localStorage.removeItem(ROOM_STORAGE_KEY); } catch (e) {} }
         function lockRoomCode(code) {
             currentRoomCode = String(code).toUpperCase();
-            roomCodeLockedUntil = Date.now() + ROOM_CODE_LOCK_MS;
             saveRoomToStorage(currentRoomCode);
         }
-
         function clearHostKeepAlive() {
-            if (hostKeepAliveTimer) {
-                clearInterval(hostKeepAliveTimer);
-                hostKeepAliveTimer = null;
-            }
+            if (hostKeepAliveTimer) { clearInterval(hostKeepAliveTimer); hostKeepAliveTimer = null; }
         }
-
         function startHostKeepAlive() {
             clearHostKeepAlive();
             hostKeepAliveTimer = setInterval(() => {
-                if (mode !== 'host' || isConnected) {
-                    clearHostKeepAlive();
-                    return;
-                }
-                // Prefer soft reconnect — do NOT destroy the peer (that causes new codes)
+                if (mode !== 'host') { clearHostKeepAlive(); return; }
                 if (peer && !peer.destroyed && peer.disconnected) {
                     try { peer.reconnect(); } catch (e) {}
                 }
-                const el = document.getElementById('hostStatus');
-                if (el && peer && !peer.destroyed && !peer.disconnected) {
-                    el.textContent = 'Waiting for opponent to join... (' + (currentRoomCode || '') + ')';
-                    el.className = 'status success';
-                }
+                if (!gameStarted) updatePlayerCountUI();
             }, 4000);
         }
-
         function destroyPeer(keepRoomCode) {
             clearHostKeepAlive();
-            if (conn) {
-                try { conn.close(); } catch (e) {}
-                conn = null;
+            // Close all slot connections
+            if (slots) {
+                for (const s of slots) {
+                    if (s.conn) { try { s.conn.close(); } catch (e) {} s.conn = null; }
+                }
             }
-            if (peer) {
-                try { peer.destroy(); } catch (e) {}
-                peer = null;
-            }
-            isConnected = false;
-            if (!keepRoomCode) {
-                currentRoomCode = null;
-                roomCodeLockedUntil = 0;
-                clearRoomStorage();
-            }
+            if (clientConn) { try { clientConn.close(); } catch (e) {} clientConn = null; }
+            if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+            if (!keepRoomCode) { currentRoomCode = null; clearRoomStorage(); }
         }
 
-        function resolveHostCode(preferredCode) {
-            // Priority: explicit > memory > localStorage > generate once
-            if (preferredCode) return String(preferredCode).toUpperCase();
+        function resolveHostCode(preferred) {
+            if (preferred) return String(preferred).toUpperCase();
             if (currentRoomCode) return currentRoomCode;
             const stored = loadRoomFromStorage();
             if (stored) return stored;
@@ -896,26 +663,24 @@
 
         function setupHost(preferredCode) {
             const code = resolveHostCode(preferredCode);
-
-            // Soft path: if peer exists with same id and only disconnected, just reconnect
             if (peer && !peer.destroyed && peer.id === code && peer.disconnected) {
-                document.getElementById('hostStatus').textContent = 'Reconnecting to room ' + code + '...';
-                document.getElementById('hostStatus').className = 'status';
-                try {
-                    peer.reconnect();
-                    return;
-                } catch (e) {
-                    // fall through to full recreate
-                }
+                try { peer.reconnect(); return; } catch (e) {}
             }
-
-            destroyPeer(true); // ALWAYS keep room code
+            destroyPeer(true);
             hostRecreating = false;
             lockRoomCode(code);
+            initSlots();
+            // Host occupies slot 0
+            slots[0].active = true;
+            slots[0].peerId = 'host';
+            slots[0].tank = new Tank(0);
+            gameStarted = false;
+            mySlot = 0;
 
             document.getElementById('roomCodeDisplay').textContent = code;
             document.getElementById('hostStatus').textContent = 'Opening room ' + code + '...';
             document.getElementById('hostStatus').className = 'status';
+            updatePlayerCountUI();
 
             peer = new Peer(code, PEER_OPTS);
 
@@ -923,122 +688,137 @@
                 lockRoomCode(id);
                 hostSameCodeAttempts = 0;
                 document.getElementById('roomCodeDisplay').textContent = id;
-                document.getElementById('hostStatus').textContent = 'Waiting for opponent to join... (' + id + ')';
+                document.getElementById('hostStatus').textContent = 'Waiting for players... (need 2 to start)';
                 document.getElementById('hostStatus').className = 'status success';
                 startHostKeepAlive();
             });
 
             peer.on('connection', connection => {
-                if (conn && conn.open) {
-                    connection.close();
-                    return;
-                }
-                conn = connection;
-                clearHostKeepAlive();
-                setupConnection();
+                handleIncomingConnection(connection);
             });
 
             peer.on('disconnected', () => {
-                if (mode === 'host' && !isConnected && peer && !peer.destroyed) {
-                    document.getElementById('hostStatus').textContent =
-                        'Connection lost — reconnecting to ' + (currentRoomCode || code) + '...';
+                if (mode === 'host' && peer && !peer.destroyed) {
+                    document.getElementById('hostStatus').textContent = 'Connection lost — reconnecting to ' + (currentRoomCode || code) + '...';
                     document.getElementById('hostStatus').className = 'status error';
-                    // Soft reconnect only — never generate a new code
                     setTimeout(() => {
-                        if (mode !== 'host' || isConnected || !peer || peer.destroyed) return;
-                        try {
-                            peer.reconnect();
-                        } catch (e) {
-                            scheduleHostRecreate(3000);
+                        if (mode === 'host' && peer && !peer.destroyed) {
+                            try { peer.reconnect(); } catch (e) { scheduleHostRecreate(3000); }
                         }
                     }, 500);
                 }
             });
 
             peer.on('error', err => {
-                console.error('Host peer error:', err.type, err);
-                // NEVER change the room code automatically
+                console.error('Host error', err.type, err);
                 hostSameCodeAttempts++;
                 const label = currentRoomCode || code;
+                document.getElementById('hostStatus').textContent =
+                    (err.type === 'unavailable-id' ? 'Room busy, retrying ' : 'Network issue, restoring ') + label + '...';
+                document.getElementById('hostStatus').className = 'status error';
+                scheduleHostRecreate(err.type === 'unavailable-id' ? 3000 : 2000);
+            });
+        }
 
-                if (err.type === 'unavailable-id') {
-                    // Broker still has this ID from a previous socket — wait, then retry SAME code
-                    document.getElementById('hostStatus').textContent =
-                        'Room ' + label + ' busy on server, retrying (' + hostSameCodeAttempts + ')...';
-                    document.getElementById('hostStatus').className = 'status error';
-                    scheduleHostRecreate(3000 + Math.min(hostSameCodeAttempts, 10) * 500);
-                } else if (err.type === 'network' || err.type === 'server-error' ||
-                           err.type === 'socket-error' || err.type === 'socket-closed') {
-                    document.getElementById('hostStatus').textContent =
-                        'Network issue — restoring room ' + label + '...';
-                    document.getElementById('hostStatus').className = 'status error';
-                    scheduleHostRecreate(2000);
-                } else {
-                    document.getElementById('hostStatus').textContent =
-                        'Error (' + err.type + ') — restoring room ' + label + '...';
-                    document.getElementById('hostStatus').className = 'status error';
-                    scheduleHostRecreate(2000);
+        function handleIncomingConnection(connection) {
+            connection.on('open', () => {
+                const slot = firstFreeSlot();
+                if (slot < 0) {
+                    connection.send({ type: 'full' });
+                    connection.close();
+                    return;
+                }
+                slots[slot].active = true;
+                slots[slot].peerId = connection.peer;
+                slots[slot].conn = connection;
+                slots[slot].inputs = emptyInputs();
+                slots[slot].tank = new Tank(slot);
+                // If joining mid-game, keep them alive for current round
+                if (gameStarted && !matchOver) {
+                    slots[slot].tank.reset();
+                }
+                updatePlayerCountUI();
+                updateScoreBoard();
+
+                connection.send({
+                    type: 'welcome',
+                    slot: slot,
+                    gameStarted: gameStarted,
+                    scores: scores,
+                    currentRound: currentRound,
+                    matchOver: matchOver,
+                    activeSlots: slots.map(s => s.active)
+                });
+
+                connection.on('data', data => {
+                    if (data.type === 'input' && slots[slot]) {
+                        slots[slot].inputs = data.inputs || emptyInputs();
+                    }
+                });
+                connection.on('close', () => {
+                    if (slots[slot] && slots[slot].conn === connection) {
+                        slots[slot].active = false;
+                        slots[slot].conn = null;
+                        slots[slot].peerId = null;
+                        updatePlayerCountUI();
+                        updateScoreBoard();
+                        if (gameStarted) broadcastState(true);
+                    }
+                });
+
+                document.getElementById('hostStatus').textContent =
+                    'Players: ' + countActive() + '/4' + (gameStarted ? ' (in game)' : ' — starting soon...');
+                document.getElementById('hostStatus').className = 'status success';
+
+                // Start when 2nd player joins
+                if (!gameStarted && countActive() >= 2) {
+                    setTimeout(() => beginOnlineGame(), 500);
+                } else if (gameStarted) {
+                    broadcastState(true);
+                    showMessage(PLAYER_NAMES[slot] + ' joined!');
+                    setTimeout(() => messageEl.classList.remove('show'), 1500);
                 }
             });
+        }
+
+        function beginOnlineGame() {
+            if (gameStarted || mode !== 'host') return;
+            gameStarted = true;
+            scores = [0, 0, 0, 0];
+            currentRound = 1;
+            gameOver = false;
+            matchOver = false;
+            for (const s of slots) if (s.active) s.tank.reset();
+            showGameUI('host');
+            broadcastState(true);
         }
 
         function scheduleHostRecreate(delayMs) {
             if (hostRecreating || mode !== 'host') return;
             hostRecreating = true;
-            const delay = delayMs || 2000;
             setTimeout(() => {
                 hostRecreating = false;
-                if (mode !== 'host' || isConnected) return;
-                // ALWAYS same code
-                const code = currentRoomCode || loadRoomFromStorage();
-                if (code) setupHost(code);
-                else setupHost(null);
-            }, delay);
+                if (mode !== 'host') return;
+                setupHost(currentRoomCode || loadRoomFromStorage());
+            }, delayMs || 2000);
         }
 
         function restoreHostIfNeeded() {
-            if (mode !== 'host' || isConnected) return;
+            if (mode !== 'host') return;
             const code = currentRoomCode || loadRoomFromStorage();
-            document.getElementById('hostStatus').textContent =
-                'Back — restoring room ' + (code || '') + '...';
-            document.getElementById('hostStatus').className = 'status';
-
             if (peer && !peer.destroyed) {
                 if (peer.disconnected) {
-                    try {
-                        peer.reconnect();
-                        return;
-                    } catch (e) {
-                        scheduleHostRecreate(500);
-                        return;
-                    }
+                    try { peer.reconnect(); } catch (e) { scheduleHostRecreate(500); }
                 }
-                // Peer looks fine
-                document.getElementById('roomCodeDisplay').textContent = peer.id || code || '----';
-                document.getElementById('hostStatus').textContent =
-                    'Waiting for opponent to join... (' + (peer.id || code || '') + ')';
-                document.getElementById('hostStatus').className = 'status success';
-                startHostKeepAlive();
                 return;
             }
-            scheduleHostRecreate(400);
+            if (!gameStarted) scheduleHostRecreate(400);
         }
-
-        // Mobile: app-switch hides the page. Restore the SAME room when visible again.
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                restoreHostIfNeeded();
-            }
+            if (document.visibilityState === 'visible') restoreHostIfNeeded();
         });
-        window.addEventListener('focus', () => {
-            restoreHostIfNeeded();
-        });
-        window.addEventListener('pageshow', () => {
-            restoreHostIfNeeded();
-        });
-
-        // CRITICAL: do NOT destroy peer on beforeunload/pagehide.
-        // On mobile those fire when switching apps, which was changing/killing the room.
+        window.addEventListener('focus', restoreHostIfNeeded);
+        window.addEventListener('pageshow', restoreHostIfNeeded);
 
         async function copyShareLink() {
             const code = currentRoomCode || document.getElementById('roomCodeDisplay').textContent;
@@ -1048,7 +828,6 @@
                 return;
             }
             lockRoomCode(code);
-
             if (peer && peer.disconnected) {
                 try { peer.reconnect(); } catch (e) { scheduleHostRecreate(500); }
             }
@@ -1059,15 +838,11 @@
                     await navigator.clipboard.writeText(link);
                 } else {
                     const ta = document.createElement('textarea');
-                    ta.value = link;
-                    ta.style.position = 'fixed';
-                    ta.style.left = '-9999px';
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand('copy');
+                    ta.value = link; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+                    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
                     document.body.removeChild(ta);
                 }
-                statusEl.textContent = 'Link copied for room ' + code + '. Come back here after sending.';
+                statusEl.textContent = 'Link copied for room ' + code + '. Come back after sending.';
                 statusEl.className = 'status success';
             } catch (e) {
                 statusEl.textContent = link;
@@ -1078,42 +853,30 @@
         function setupJoin(code, isRetry) {
             if (!isRetry) joinRetryCount = 0;
             code = (code || '').toUpperCase();
-
             document.getElementById('joinStatus').textContent =
                 joinRetryCount > 0
                     ? 'Host not found, retrying (' + joinRetryCount + '/' + MAX_JOIN_RETRIES + ')...'
                     : 'Connecting to ' + code + '...';
             document.getElementById('joinStatus').className = 'status';
-
             destroyPeer(false);
-
             peer = new Peer(PEER_OPTS);
-
             peer.on('open', () => {
-                conn = peer.connect(code, {
-                    reliable: true,
-                    serialization: 'json'
+                clientConn = peer.connect(code, { reliable: true, serialization: 'json' });
+                clientConn.on('error', () => retryJoin(code));
+                clientConn.on('open', () => {
+                    document.getElementById('joinStatus').textContent = 'Connected! Waiting for slot...';
+                    document.getElementById('joinStatus').className = 'status success';
                 });
-
-                conn.on('error', err => {
-                    console.error('Join conn error:', err);
-                    retryJoin(code);
+                clientConn.on('data', data => handleClientData(data));
+                clientConn.on('close', () => {
+                    showMessage('Disconnected from host');
+                    setTimeout(() => leaveGame(), 2000);
                 });
-
-                setupConnection();
-
-                setTimeout(() => {
-                    if (!isConnected && mode === 'client') {
-                        retryJoin(code);
-                    }
-                }, 5000);
+                setTimeout(() => { if (mode === 'client' && !gameStarted && mySlot === 0 && !slots[0]?.active) retryJoin(code); }, 5000);
             });
-
             peer.on('error', err => {
-                console.error('Join peer error:', err.type, err);
-                if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'server-error') {
-                    retryJoin(code);
-                } else {
+                if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'server-error') retryJoin(code);
+                else {
                     document.getElementById('joinStatus').textContent = 'Error: ' + (err.type || err.message);
                     document.getElementById('joinStatus').className = 'status error';
                 }
@@ -1121,7 +884,7 @@
         }
 
         function retryJoin(code) {
-            if (mode !== 'client' || isConnected) return;
+            if (mode !== 'client' || gameStarted) return;
             joinRetryCount++;
             if (joinRetryCount > MAX_JOIN_RETRIES) {
                 document.getElementById('joinStatus').textContent =
@@ -1130,95 +893,128 @@
                 destroyPeer(false);
                 return;
             }
-            setTimeout(() => {
-                if (mode === 'client' && !isConnected) setupJoin(code, true);
-            }, 2500);
+            setTimeout(() => { if (mode === 'client' && !gameStarted) setupJoin(code, true); }, 2500);
         }
 
-        function setupConnection() {
-            conn.on('open', () => {
-                isConnected = true;
-                if (mode === 'host') {
-                    document.getElementById('hostStatus').textContent = 'Opponent connected! Starting...';
-                    setTimeout(() => startGame('host'), 600);
+        function handleClientData(data) {
+            if (data.type === 'full') {
+                document.getElementById('joinStatus').textContent = 'Room is full (4/4)';
+                document.getElementById('joinStatus').className = 'status error';
+                return;
+            }
+            if (data.type === 'welcome') {
+                mySlot = data.slot;
+                scores = data.scores || [0, 0, 0, 0];
+                currentRound = data.currentRound || 1;
+                matchOver = !!data.matchOver;
+                initSlots();
+                if (data.activeSlots) {
+                    data.activeSlots.forEach((a, i) => { if (slots[i]) slots[i].active = !!a; });
+                }
+                slots[mySlot].active = true;
+                if (data.gameStarted) {
+                    gameStarted = true;
+                    showGameUI('client');
                 } else {
-                    document.getElementById('joinStatus').textContent = 'Connected! Starting...';
+                    document.getElementById('joinStatus').textContent =
+                        'You are ' + PLAYER_NAMES[mySlot] + ' — waiting for game to start...';
                     document.getElementById('joinStatus').className = 'status success';
-                    setTimeout(() => startGame('client'), 600);
-                }
-            });
-
-            conn.on('data', data => handleNetworkData(data));
-
-            conn.on('close', () => {
-                isConnected = false;
-                showMessage('Opponent disconnected');
-                setTimeout(() => leaveGame(), 2000);
-            });
-
-            conn.on('error', err => console.error('Connection error', err));
-        }
-
-        function handleNetworkData(data) {
-            if (data.type === 'state' && mode === 'client') {
-                tank1.fromState(data.t1);
-                tank2.fromState(data.t2);
-                scores = data.scores;
-                score1El.textContent = scores[0];
-                score2El.textContent = scores[1];
-                currentRound = data.currentRound || currentRound;
-                updateRoundLabel();
-
-                if (data.matchOver && !matchOver) {
-                    matchOver = true;
-                    gameOver = true;
-                    showMatchOver(data.matchWinner);
-                } else if (data.gameOver && !gameOver && !matchOver) {
-                    gameOver = true;
-                    if (data.roundWinner === 0) showMessage('P1 wins the round!');
-                    else if (data.roundWinner === 1) showMessage('P2 wins the round!');
-                }
-                if (!data.gameOver && gameOver && !matchOver) {
-                    gameOver = false;
-                    messageEl.classList.remove('show');
                 }
             }
-            if (data.type === 'input' && mode === 'host') {
-                remoteInputs = data.inputs;
+            if (data.type === 'state') {
+                if (!gameStarted) {
+                    gameStarted = true;
+                    showGameUI('client');
+                }
+                applyHostState(data);
             }
-            if (data.type === 'restart' && mode === 'client') {
-                resetRound(false);
-            }
-            if (data.type === 'playAgain' && mode === 'client') {
+            if (data.type === 'playAgain') {
                 startNewMatch(false);
             }
         }
 
-        function sendState(force = false) {
-            if (!conn || !isConnected || mode !== 'host') return;
+        function applyHostState(data) {
+            scores = data.scores || scores;
+            currentRound = data.currentRound || currentRound;
+            gameOver = !!data.gameOver;
+            matchOver = !!data.matchOver;
+            if (data.activeSlots) {
+                data.activeSlots.forEach((a, i) => {
+                    if (!slots[i]) return;
+                    slots[i].active = !!a;
+                    if (a && !slots[i].tank) slots[i].tank = new Tank(i);
+                });
+            }
+            if (data.tanks) {
+                for (const ts of data.tanks) {
+                    if (!slots[ts.slot]) continue;
+                    if (!slots[ts.slot].tank) slots[ts.slot].tank = new Tank(ts.slot);
+                    slots[ts.slot].active = true;
+                    slots[ts.slot].tank.fromState(ts);
+                }
+            }
+            updateScoreBoard();
+            updateRoundLabel();
+            if (matchOver) {
+                const winner = data.matchWinner;
+                if (winner != null) showMatchOver(winner);
+            } else if (data.roundWinner != null && gameOver) {
+                showMessage(PLAYER_NAMES[data.roundWinner] + ' wins the round!');
+            } else if (!gameOver) {
+                messageEl.classList.remove('show');
+            }
+            if (data.matchOver === false && document.getElementById('matchOverlay').style.display !== 'none') {
+                hideMatchOverlay();
+            }
+        }
+
+        function broadcastState(force) {
+            if (mode !== 'host') return;
             const now = Date.now();
             if (!force && now - lastNetworkSend < TICK_RATE) return;
             lastNetworkSend = now;
 
-            conn.send({
+            const tanks = activeSlots().map(s => s.tank.toState());
+            let roundWinner = null;
+            if (gameOver && !matchOver) {
+                const alive = activeTanks().filter(t => t.alive);
+                if (alive.length === 1) roundWinner = alive[0].slot;
+            }
+            let matchWinner = null;
+            if (matchOver) {
+                let best = -1, bestSlot = 0;
+                for (let i = 0; i < MAX_PLAYERS; i++) {
+                    if (scores[i] > best) { best = scores[i]; bestSlot = i; }
+                }
+                matchWinner = bestSlot;
+            }
+
+            const payload = {
                 type: 'state',
-                t1: tank1.toState(),
-                t2: tank2.toState(),
-                scores: scores,
-                gameOver: gameOver,
-                matchOver: matchOver,
-                currentRound: currentRound,
-                roundWinner: (!tank1.alive && tank2.alive) ? 1 : ((tank1.alive && !tank2.alive) ? 0 : null),
-                matchWinner: matchOver ? (scores[0] >= 2 ? 0 : 1) : null
-            });
+                tanks,
+                scores,
+                currentRound,
+                gameOver,
+                matchOver,
+                roundWinner,
+                matchWinner,
+                activeSlots: slots.map(s => s.active)
+            };
+            for (const s of slots) {
+                if (s.conn && s.conn.open) {
+                    try { s.conn.send(payload); } catch (e) {}
+                }
+            }
         }
 
-        function sendInputs() {
-            if (!conn || !isConnected || mode !== 'client') return;
+        function sendClientInputs() {
+            if (mode !== 'client' || !clientConn || !clientConn.open) return;
             const now = Date.now();
             if (now - lastNetworkSend < TICK_RATE) return;
             lastNetworkSend = now;
-            conn.send({ type: 'input', inputs: getLocalInputs() });
+            try {
+                clientConn.send({ type: 'input', inputs: getMergedInputs() });
+            } catch (e) {}
         }
 
         // ==================== GAME FLOW ====================
@@ -1231,166 +1027,130 @@
             document.getElementById('btnHost').style.display = 'block';
             document.getElementById('btnJoin').style.display = 'block';
             touchControls.classList.remove('active');
-            resetTouchDirs();
-            touchInput.shoot = false;
             hideMatchOverlay();
-            if (roundTransitionTimer) {
-                clearTimeout(roundTransitionTimer);
-                roundTransitionTimer = null;
-            }
+            if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
         }
 
-        function startGame(m) {
+        function showGameUI(m) {
             mode = m;
-            startNewMatch(false);
-
             document.getElementById('menu').style.display = 'none';
             document.getElementById('gameUI').style.display = 'flex';
-            disconnectBtn.style.display = (mode !== 'local') ? 'block' : 'none';
-
+            disconnectBtn.style.display = mode !== 'local' ? 'block' : 'none';
             if (mode === 'local') {
                 modeLabel.textContent = 'Local';
-                controlsInfo.innerHTML = `
-                    <div><strong>P1 Blue</strong><br>WASD + SPACE</div>
-                    <div><strong>P2 Red</strong><br>Arrows + ENTER</div>`;
-                restartHint.textContent = 'Best of 3 — first to 2 rounds wins';
-                myTankIndex = 0;
-            } else if (mode === 'host') {
-                modeLabel.textContent = 'Online (You: Blue)';
-                controlsInfo.innerHTML = `<div><strong>You are Blue</strong><br>WASD / Arrows / Touch</div>`;
-                restartHint.textContent = 'Best of 3 — first to 2 rounds wins';
-                myTankIndex = 0;
+                controlsInfo.innerHTML = '<div><strong>P1 Blue</strong><br>WASD + SPACE</div><div><strong>P2 Red</strong><br>Arrows + ENTER</div>';
             } else {
-                modeLabel.textContent = 'Online (You: Red)';
-                controlsInfo.innerHTML = `<div><strong>You are Red</strong><br>WASD / Arrows / Touch</div>`;
-                restartHint.textContent = 'Best of 3 — first to 2 rounds wins';
-                myTankIndex = 1;
+                modeLabel.textContent = 'Online — You: ' + PLAYER_NAMES[mySlot];
+                controlsInfo.innerHTML = '<div><strong>You are ' + PLAYER_NAMES[mySlot] + '</strong><br>WASD / Arrows / Joystick + FIRE</div>';
             }
-
+            restartHint.textContent = 'Best of 3 — last tank standing wins the round';
+            updateScoreBoard();
+            updateRoundLabel();
             updateTouchControlsVisibility();
             resizeCanvas();
         }
 
-        function startNewMatch(send = true) {
-            if (roundTransitionTimer) {
-                clearTimeout(roundTransitionTimer);
-                roundTransitionTimer = null;
-            }
-            scores = [0, 0];
-            score1El.textContent = '0';
-            score2El.textContent = '0';
+        function startLocalGame() {
+            mode = 'local';
+            gameStarted = true;
+            initSlots();
+            slots[0].active = true;
+            slots[1].active = true;
+            mySlot = 0;
+            startNewMatch(false);
+            showGameUI('local');
+        }
+
+        function startNewMatch(send) {
+            if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
+            scores = [0, 0, 0, 0];
             currentRound = 1;
             gameOver = false;
             matchOver = false;
             hideMatchOverlay();
             messageEl.classList.remove('show');
-            messageEl.textContent = '';
             resetTouchDirs();
             touchInput.shoot = false;
-            createTanks();
+            for (const s of slots) if (s.active) s.tank.reset();
+            updateScoreBoard();
             updateRoundLabel();
-
-            if (mode === 'host' && send && conn && isConnected) {
-                conn.send({ type: 'playAgain' });
-                sendState(true);
+            if (mode === 'host' && send) {
+                for (const s of slots) {
+                    if (s.conn && s.conn.open) {
+                        try { s.conn.send({ type: 'playAgain' }); } catch (e) {}
+                    }
+                }
+                broadcastState(true);
             }
         }
 
-        function resetRound(send = true) {
+        function resetRound() {
             if (matchOver) return;
-            if (roundTransitionTimer) {
-                clearTimeout(roundTransitionTimer);
-                roundTransitionTimer = null;
-            }
-            createTanks();
+            if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
             gameOver = false;
             messageEl.classList.remove('show');
-            messageEl.textContent = '';
+            for (const s of slots) if (s.active) s.tank.reset();
             updateRoundLabel();
-            if (mode === 'host' && send && conn) {
-                conn.send({ type: 'restart' });
-                sendState(true);
-            }
+            if (mode === 'host') broadcastState(true);
         }
 
-        function onRoundWin(winnerIndex) {
+        function onRoundWin(winnerSlot) {
             if (gameOver || matchOver) return;
             gameOver = true;
-            scores[winnerIndex]++;
-            score1El.textContent = scores[0];
-            score2El.textContent = scores[1];
+            scores[winnerSlot]++;
+            updateScoreBoard();
+            showMessage(PLAYER_NAMES[winnerSlot] + ' wins the round!');
 
-            const name = winnerIndex === 0 ? 'P1 (Blue)' : 'P2 (Red)';
-
-            if (scores[winnerIndex] >= 2) {
+            if (scores[winnerSlot] >= 2) {
                 matchOver = true;
-                showMessage(name + ' wins the round!');
-                setTimeout(() => showMatchOver(winnerIndex), 1200);
+                setTimeout(() => showMatchOver(winnerSlot), 1200);
             } else {
-                showMessage(name + ' wins the round!');
                 currentRound++;
-                // Auto-start next round after a short delay (host / local only)
                 if (mode === 'local' || mode === 'host') {
-                    roundTransitionTimer = setTimeout(() => {
-                        resetRound(true);
-                    }, 2200);
+                    roundTransitionTimer = setTimeout(() => resetRound(), 2200);
                 }
             }
-            if (mode === 'host') sendState(true);
+            if (mode === 'host') broadcastState(true);
         }
 
-        function showMatchOver(winnerIndex) {
+        function checkRoundEnd() {
+            if (gameOver || matchOver || !gameStarted) return;
+            const alive = activeTanks().filter(t => t.alive);
+            if (alive.length === 1 && countActive() >= 2) {
+                onRoundWin(alive[0].slot);
+            }
+        }
+
+        function showMatchOver(winnerSlot) {
             matchOver = true;
             gameOver = true;
             messageEl.classList.remove('show');
-            const overlay = document.getElementById('matchOverlay');
-            const resultEl = document.getElementById('matchResultText');
-            const scoreEl = document.getElementById('matchScoreText');
-            const name = winnerIndex === 0 ? 'PLAYER 1 (BLUE)' : 'PLAYER 2 (RED)';
-            resultEl.textContent = name + ' WINS THE MATCH!';
-            scoreEl.textContent = 'Final score: ' + scores[0] + ' – ' + scores[1] + '  (Best of 3)';
-            overlay.style.display = 'flex';
-
-            // Online guest: only host starts a new match; still allow back to menu
+            document.getElementById('matchResultText').textContent = PLAYER_NAMES[winnerSlot] + ' WINS THE MATCH!';
+            document.getElementById('matchScoreText').textContent =
+                scores.map((s, i) => (slots[i] && slots[i].active) || s > 0 ? PLAYER_NAMES[i] + ': ' + s : null)
+                    .filter(Boolean).join('  ·  ');
+            document.getElementById('matchOverlay').style.display = 'flex';
             const playBtn = document.getElementById('btnPlayAgain');
             if (mode === 'client') {
                 playBtn.textContent = 'Waiting for host...';
                 playBtn.disabled = true;
-                playBtn.style.opacity = '0.6';
             } else {
                 playBtn.textContent = 'Play Again';
                 playBtn.disabled = false;
-                playBtn.style.opacity = '1';
             }
         }
-
         function hideMatchOverlay() {
-            const overlay = document.getElementById('matchOverlay');
-            overlay.style.display = 'none';
+            document.getElementById('matchOverlay').style.display = 'none';
             const playBtn = document.getElementById('btnPlayAgain');
             playBtn.disabled = false;
-            playBtn.style.opacity = '1';
             playBtn.textContent = 'Play Again';
         }
 
-        function updateRoundLabel() {
-            const el = document.getElementById('roundLabel');
-            if (!el) return;
-            if (matchOver) {
-                el.textContent = 'Match Over';
-            } else {
-                el.textContent = 'Round ' + currentRound + ' / 3';
-            }
-        }
-
         function leaveGame() {
-            if (roundTransitionTimer) {
-                clearTimeout(roundTransitionTimer);
-                roundTransitionTimer = null;
-            }
-            destroyPeer();
-            currentRoomCode = null;
+            if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
+            destroyPeer(false);
             mode = null;
+            gameStarted = false;
             matchOver = false;
             hideMatchOverlay();
             showMenu();
@@ -1401,90 +1161,63 @@
             messageEl.classList.add('show');
         }
 
-        // ==================== RESPONSIVE CANVAS ====================
         function resizeCanvas() {
-            // Canvas internal resolution stays 800x500 for consistent gameplay
-            // CSS scales it to fit the available space
             const wrap = document.querySelector('.canvas-wrap');
             if (!wrap) return;
-            const maxW = wrap.clientWidth - 8;
-            const maxH = wrap.clientHeight - 8;
-            const scale = Math.min(maxW / 800, maxH / 500, 1);
+            const scale = Math.min((wrap.clientWidth - 8) / 800, (wrap.clientHeight - 8) / 500, 1);
             canvas.style.width = (800 * scale) + 'px';
             canvas.style.height = (500 * scale) + 'px';
         }
+        window.addEventListener('resize', () => { resizeCanvas(); updateTouchControlsVisibility(); });
+        window.addEventListener('orientationchange', () => setTimeout(() => { resizeCanvas(); updateTouchControlsVisibility(); }, 200));
 
-        window.addEventListener('resize', () => {
-            resizeCanvas();
-            updateTouchControlsVisibility();
-        });
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => {
-                resizeCanvas();
-                updateTouchControlsVisibility();
-            }, 200);
-        });
-
-        // ==================== RENDER ====================
-        function drawWalls() {
+        function drawWorld() {
+            ctx.fillStyle = '#0f0f1a';
+            ctx.fillRect(0, 0, 800, 500);
+            ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < 800; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 500); ctx.stroke(); }
+            for (let y = 0; y < 500; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(800, y); ctx.stroke(); }
             ctx.fillStyle = '#2a2a4a';
             for (const w of walls) {
                 ctx.fillRect(w.x, w.y, w.w, w.h);
-                ctx.strokeStyle = '#3a3a6a';
-                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#3a3a6a'; ctx.lineWidth = 2;
                 ctx.strokeRect(w.x, w.y, w.w, w.h);
-            }
-        }
-
-        function drawGrid() {
-            ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-            ctx.lineWidth = 1;
-            for (let x = 0; x < 800; x += 40) {
-                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 500); ctx.stroke();
-            }
-            for (let y = 0; y < 500; y += 40) {
-                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(800, y); ctx.stroke();
             }
         }
 
         function gameLoop() {
             requestAnimationFrame(gameLoop);
-            if (!mode) return;
+            if (!mode || !gameStarted) return;
 
-            ctx.fillStyle = '#0f0f1a';
-            ctx.fillRect(0, 0, 800, 500);
-            drawGrid();
-            drawWalls();
+            drawWorld();
 
             if (mode === 'local') {
-                const inputs = getLocalInputs();
-                tank1.update(inputs.p1, tank2);
-                tank2.update(inputs.p2, tank1);
-
-                if (!gameOver && !matchOver) {
-                    if (tank1.checkHit(tank2)) onRoundWin(0);
-                    else if (tank2.checkHit(tank1)) onRoundWin(1);
-                }
+                const tanks = activeTanks();
+                slots[0].tank.update(getLocalP1Inputs(), tanks);
+                slots[1].tank.update(getLocalP2Inputs(), tanks);
+                for (const t of tanks) t.checkHits(tanks);
+                checkRoundEnd();
             } else if (mode === 'host') {
-                const myInputs = getLocalInputs();
-                tank1.update(myInputs, tank2);
-                tank2.update(remoteInputs, tank1);
-
-                if (!gameOver && !matchOver) {
-                    if (tank1.checkHit(tank2)) onRoundWin(0);
-                    else if (tank2.checkHit(tank1)) onRoundWin(1);
+                slots[0].inputs = getMergedInputs();
+                const tanks = activeTanks();
+                for (const s of activeSlots()) {
+                    s.tank.update(s.inputs, tanks);
                 }
-                sendState();
+                for (const s of activeSlots()) s.tank.checkHits(tanks);
+                checkRoundEnd();
+                broadcastState(false);
             } else if (mode === 'client') {
-                sendInputs();
+                sendClientInputs();
             }
 
-            if (tank1) tank1.draw();
-            if (tank2) tank2.draw();
+            for (const s of slots) {
+                if (s.active && s.tank) s.tank.draw();
+            }
         }
 
-        // ==================== UI EVENTS ====================
-        document.getElementById('btnLocal').onclick = () => startGame('local');
+        // ==================== UI ====================
+        document.getElementById('btnLocal').onclick = () => startLocalGame();
         document.getElementById('btnHost').onclick = () => {
             document.getElementById('btnLocal').style.display = 'none';
             document.getElementById('btnHost').style.display = 'none';
@@ -1500,19 +1233,19 @@
             document.getElementById('joinPanel').style.display = 'block';
         };
         document.getElementById('btnCancelHost').onclick = () => {
-            mode = null;
-            destroyPeer(false); // clears room code + storage
+            mode = null; gameStarted = false;
+            destroyPeer(false);
             showMenu();
         };
         document.getElementById('btnCancelJoin').onclick = () => {
-            mode = null;
-            destroyPeer();
+            mode = null; gameStarted = false;
+            destroyPeer(false);
             showMenu();
         };
         document.getElementById('btnDoJoin').onclick = () => {
             const code = document.getElementById('joinCode').value.trim().toUpperCase();
             if (code.length < 4) {
-                document.getElementById('joinStatus').textContent = 'Please enter a valid room code';
+                document.getElementById('joinStatus').textContent = 'Enter a valid room code';
                 document.getElementById('joinStatus').className = 'status error';
                 return;
             }
@@ -1524,28 +1257,21 @@
         });
         document.getElementById('btnShareLink').onclick = () => copyShareLink();
         disconnectBtn.onclick = leaveGame;
-
         document.getElementById('btnPlayAgain').onclick = () => {
-            if (mode === 'client') return; // host starts new match
+            if (mode === 'client') return;
             startNewMatch(true);
         };
-        document.getElementById('btnMatchMenu').onclick = () => {
-            leaveGame();
-        };
+        document.getElementById('btnMatchMenu').onclick = leaveGame;
 
-        // Auto-join from share link: ?room=CODE
         function tryAutoJoinFromUrl() {
             try {
-                const params = new URLSearchParams(window.location.search);
-                const room = (params.get('room') || '').trim().toUpperCase();
-                if (room && room.length >= 4) {
+                const room = (new URLSearchParams(window.location.search).get('room') || '').trim().toUpperCase();
+                if (room.length >= 4) {
                     document.getElementById('btnLocal').style.display = 'none';
                     document.getElementById('btnHost').style.display = 'none';
                     document.getElementById('btnJoin').style.display = 'none';
                     document.getElementById('joinPanel').style.display = 'block';
                     document.getElementById('joinCode').value = room;
-                    document.getElementById('joinStatus').textContent = 'Joining room ' + room + '...';
-                    document.getElementById('joinStatus').className = 'status';
                     mode = 'client';
                     setupJoin(room);
                     return true;
@@ -1554,7 +1280,6 @@
             return false;
         }
 
-        // Init
         detectTouchDevice();
         gameLoop();
         showMenu();
