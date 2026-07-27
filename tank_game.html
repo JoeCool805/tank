@@ -193,41 +193,39 @@
         }
         #touchControls.active { display: block; }
 
-        .dpad {
+        .joystick-zone {
             position: absolute;
-            bottom: 16px;
-            left: 12px;
-            width: 150px;
-            height: 150px;
+            bottom: 18px;
+            left: 16px;
+            width: 130px;
+            height: 130px;
             pointer-events: auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: 1fr 1fr 1fr;
-            gap: 4px;
         }
-        .dpad-btn {
-            background: rgba(0, 255, 136, 0.25);
-            border: 2px solid rgba(0, 255, 136, 0.7);
-            border-radius: 12px;
-            color: #fff;
-            font-size: 1.4rem;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .joystick-base {
+            width: 130px;
+            height: 130px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.22);
+            position: relative;
             touch-action: none;
-            user-select: none;
-            transition: background 0.08s, transform 0.08s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        .dpad-btn:active, .dpad-btn.pressed {
-            background: rgba(0, 255, 136, 0.7);
-            transform: scale(0.94);
+        .joystick-stick {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(0, 255, 136, 0.55);
+            border: 2px solid rgba(0, 255, 136, 0.9);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            transition: background 0.1s;
         }
-        .dpad-btn.up    { grid-column: 2; grid-row: 1; }
-        .dpad-btn.left  { grid-column: 1; grid-row: 2; }
-        .dpad-btn.down  { grid-column: 2; grid-row: 3; }
-        .dpad-btn.right { grid-column: 3; grid-row: 2; }
+        .joystick-stick.active {
+            background: rgba(0, 255, 136, 0.85);
+        }
 
         .shoot-btn {
             position: absolute;
@@ -267,8 +265,9 @@
         @media (max-height: 500px) and (orientation: landscape) {
             h1 { font-size: 1rem; margin: 2px 0; }
             .info { font-size: 0.7rem; gap: 8px; margin: 2px 0; }
-            .dpad { width: 120px; height: 120px; bottom: 10px; left: 10px; }
-            .dpad-btn { font-size: 1.15rem; border-radius: 10px; }
+            .joystick-zone { width: 110px; height: 110px; bottom: 10px; left: 10px; }
+            .joystick-base { width: 110px; height: 110px; }
+            .joystick-stick { width: 46px; height: 46px; }
             .shoot-btn { width: 70px; height: 70px; bottom: 14px; right: 14px; font-size: 0.8rem; }
             .controls { display: none; }
             #disconnectBtn { padding: 6px 12px; font-size: 0.8rem; margin: 2px 0; }
@@ -332,11 +331,10 @@
 
             <!-- Touch Controls Overlay -->
             <div id="touchControls">
-                <div class="dpad" id="dpad">
-                    <div class="dpad-btn up" data-dir="up">▲</div>
-                    <div class="dpad-btn left" data-dir="left">◀</div>
-                    <div class="dpad-btn down" data-dir="down">▼</div>
-                    <div class="dpad-btn right" data-dir="right">▶</div>
+                <div class="joystick-zone" id="joystickZone">
+                    <div class="joystick-base" id="joystickBase">
+                        <div class="joystick-stick" id="joystickStick"></div>
+                    </div>
                 </div>
                 <div class="shoot-btn" id="shootBtn">FIRE</div>
             </div>
@@ -352,7 +350,7 @@
             </div>
         </div>
         <p class="hint" id="restartHint">Best of 3 — first to win 2 rounds wins the match</p>
-        <p class="mobile-only-hint">Arrow buttons = move & turn &nbsp;|&nbsp; FIRE = shoot</p>
+        <p class="mobile-only-hint">Joystick = move & turn &nbsp;|&nbsp; FIRE = shoot</p>
         <button class="btn danger" id="disconnectBtn">Leave Game</button>
     </div>
 
@@ -586,12 +584,15 @@
             tank2 = new Tank(700, 250, '#ff4444', 1);
         }
 
-        // ==================== TOUCH CONTROLS (Arrow Buttons) ====================
+        // ==================== TOUCH CONTROLS (Joystick) ====================
         const shootBtn = document.getElementById('shootBtn');
-        const dpadBtns = document.querySelectorAll('.dpad-btn');
+        const joystickZone = document.getElementById('joystickZone');
+        const joystickBase = document.getElementById('joystickBase');
+        const joystickStick = document.getElementById('joystickStick');
 
-        let activeTouches = {}; // touchId -> dir|'shoot'
+        let joyTouchId = null;
         let shootTouchId = null;
+        let mouseJoy = false;
 
         function detectTouchDevice() {
             isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
@@ -606,76 +607,88 @@
             }
         }
 
-        function setDir(dir, pressed) {
-            if (dir === 'up') touchInput.up = pressed;
-            else if (dir === 'down') touchInput.down = pressed;
-            else if (dir === 'left') touchInput.left = pressed;
-            else if (dir === 'right') touchInput.right = pressed;
+        function handleJoystick(clientX, clientY) {
+            const rect = joystickBase.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            let dx = clientX - centerX;
+            let dy = clientY - centerY;
+            const maxDist = rect.width / 2 - 10;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist > maxDist) {
+                dx = (dx / dist) * maxDist;
+                dy = (dy / dist) * maxDist;
+            }
+
+            joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            joystickStick.classList.add('active');
+
+            const deadzone = 12;
+            const nx = dist > deadzone ? dx / maxDist : 0;
+            const ny = dist > deadzone ? dy / maxDist : 0;
+
+            touchInput.left = false;
+            touchInput.right = false;
+            touchInput.up = false;
+            touchInput.down = false;
+
+            if (dist > deadzone) {
+                if (nx < -0.3) touchInput.left = true;
+                if (nx > 0.3) touchInput.right = true;
+                if (ny < -0.25) touchInput.up = true;   // stick up = forward
+                if (ny > 0.4) touchInput.down = true;   // stick down = reverse
+            }
         }
 
         function resetTouchDirs() {
+            joystickStick.style.transform = 'translate(-50%, -50%)';
+            joystickStick.classList.remove('active');
             touchInput.up = false;
             touchInput.down = false;
             touchInput.left = false;
             touchInput.right = false;
-            dpadBtns.forEach(b => b.classList.remove('pressed'));
+            joyTouchId = null;
+            mouseJoy = false;
         }
 
-        // D-pad buttons
-        dpadBtns.forEach(btn => {
-            const dir = btn.dataset.dir;
+        // Joystick touch
+        joystickZone.addEventListener('touchstart', e => {
+            e.preventDefault();
+            if (joyTouchId !== null) return;
+            const t = e.changedTouches[0];
+            joyTouchId = t.identifier;
+            handleJoystick(t.clientX, t.clientY);
+        }, { passive: false });
 
-            btn.addEventListener('touchstart', e => {
-                e.preventDefault();
-                for (const t of e.changedTouches) {
-                    activeTouches[t.identifier] = dir;
-                    setDir(dir, true);
-                    btn.classList.add('pressed');
+        joystickZone.addEventListener('touchmove', e => {
+            e.preventDefault();
+            for (const t of e.changedTouches) {
+                if (t.identifier === joyTouchId) {
+                    handleJoystick(t.clientX, t.clientY);
+                    break;
                 }
-            }, { passive: false });
+            }
+        }, { passive: false });
 
-            btn.addEventListener('touchend', e => {
-                e.preventDefault();
-                for (const t of e.changedTouches) {
-                    if (activeTouches[t.identifier] === dir) {
-                        delete activeTouches[t.identifier];
-                        // Only release if no other touch is still holding this dir
-                        let stillHeld = false;
-                        for (const id in activeTouches) {
-                            if (activeTouches[id] === dir) { stillHeld = true; break; }
-                        }
-                        if (!stillHeld) {
-                            setDir(dir, false);
-                            btn.classList.remove('pressed');
-                        }
-                    }
+        function endJoyTouch(e) {
+            for (const t of e.changedTouches) {
+                if (t.identifier === joyTouchId) {
+                    resetTouchDirs();
+                    break;
                 }
-            }, { passive: false });
+            }
+        }
+        joystickZone.addEventListener('touchend', endJoyTouch, { passive: false });
+        joystickZone.addEventListener('touchcancel', endJoyTouch, { passive: false });
 
-            btn.addEventListener('touchcancel', e => {
-                for (const t of e.changedTouches) {
-                    if (activeTouches[t.identifier] === dir) {
-                        delete activeTouches[t.identifier];
-                        setDir(dir, false);
-                        btn.classList.remove('pressed');
-                    }
-                }
-            }, { passive: false });
-
-            // Mouse support for desktop testing
-            btn.addEventListener('mousedown', e => {
-                e.preventDefault();
-                setDir(dir, true);
-                btn.classList.add('pressed');
-            });
-            btn.addEventListener('mouseup', () => {
-                setDir(dir, false);
-                btn.classList.remove('pressed');
-            });
-            btn.addEventListener('mouseleave', () => {
-                setDir(dir, false);
-                btn.classList.remove('pressed');
-            });
+        // Joystick mouse (desktop testing)
+        joystickZone.addEventListener('mousedown', e => {
+            mouseJoy = true;
+            handleJoystick(e.clientX, e.clientY);
+        });
+        window.addEventListener('mousemove', e => {
+            if (mouseJoy) handleJoystick(e.clientX, e.clientY);
         });
 
         // Shoot button
@@ -708,8 +721,7 @@
         window.addEventListener('mouseup', () => {
             touchInput.shoot = false;
             shootBtn.classList.remove('pressed');
-            // Also release any mouse-held dpad
-            resetTouchDirs();
+            if (mouseJoy) resetTouchDirs();
         });
 
         // Prevent page scroll / zoom while playing
