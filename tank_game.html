@@ -782,27 +782,51 @@
                 ]
             }
         };
-        // Keep the same room code for at least 300s so sharing a link still works
+        // Room code never auto-changes while hosting. Persisted so app-switch survives.
         const ROOM_CODE_LOCK_MS = 300000;
+        const ROOM_STORAGE_KEY = 'tank_battle_room_v1';
         let currentRoomCode = null;
         let roomCodeLockedUntil = 0;
         let hostRecreating = false;
         let hostSameCodeAttempts = 0;
         let hostKeepAliveTimer = null;
         let joinRetryCount = 0;
-        const MAX_JOIN_RETRIES = 12; // ~30s of retries while host switches apps
+        const MAX_JOIN_RETRIES = 20;
 
         function getShareLink(code) {
             return GAME_BASE_URL + '?room=' + encodeURIComponent(code);
         }
 
-        function lockRoomCode(code) {
-            currentRoomCode = code;
-            roomCodeLockedUntil = Date.now() + ROOM_CODE_LOCK_MS;
+        function saveRoomToStorage(code) {
+            try {
+                localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
+                    code: code,
+                    until: Date.now() + ROOM_CODE_LOCK_MS
+                }));
+            } catch (e) {}
         }
 
-        function isRoomCodeLocked() {
-            return currentRoomCode && Date.now() < roomCodeLockedUntil;
+        function loadRoomFromStorage() {
+            try {
+                const raw = localStorage.getItem(ROOM_STORAGE_KEY);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                if (data && data.code && data.until && Date.now() < data.until) {
+                    return String(data.code).toUpperCase();
+                }
+                localStorage.removeItem(ROOM_STORAGE_KEY);
+            } catch (e) {}
+            return null;
+        }
+
+        function clearRoomStorage() {
+            try { localStorage.removeItem(ROOM_STORAGE_KEY); } catch (e) {}
+        }
+
+        function lockRoomCode(code) {
+            currentRoomCode = String(code).toUpperCase();
+            roomCodeLockedUntil = Date.now() + ROOM_CODE_LOCK_MS;
+            saveRoomToStorage(currentRoomCode);
         }
 
         function clearHostKeepAlive() {
@@ -814,28 +838,21 @@
 
         function startHostKeepAlive() {
             clearHostKeepAlive();
-            // Periodic light activity while waiting — helps some mobile browsers
-            // not suspend the tab as aggressively while the room is held
             hostKeepAliveTimer = setInterval(() => {
                 if (mode !== 'host' || isConnected) {
                     clearHostKeepAlive();
                     return;
                 }
+                // Prefer soft reconnect — do NOT destroy the peer (that causes new codes)
                 if (peer && !peer.destroyed && peer.disconnected) {
                     try { peer.reconnect(); } catch (e) {}
                 }
-                // Touch the status text so the page did some work
                 const el = document.getElementById('hostStatus');
                 if (el && peer && !peer.destroyed && !peer.disconnected) {
-                    const left = Math.max(0, Math.ceil((roomCodeLockedUntil - Date.now()) / 1000));
-                    if (left > 0) {
-                        el.textContent = 'Waiting for opponent... room held ' + left + 's';
-                    } else {
-                        el.textContent = 'Waiting for opponent to join...';
-                    }
+                    el.textContent = 'Waiting for opponent to join... (' + (currentRoomCode || '') + ')';
                     el.className = 'status success';
                 }
-            }, 3000);
+            }, 4000);
         }
 
         function destroyPeer(keepRoomCode) {
@@ -852,23 +869,41 @@
             if (!keepRoomCode) {
                 currentRoomCode = null;
                 roomCodeLockedUntil = 0;
+                clearRoomStorage();
             }
         }
 
+        function resolveHostCode(preferredCode) {
+            // Priority: explicit > memory > localStorage > generate once
+            if (preferredCode) return String(preferredCode).toUpperCase();
+            if (currentRoomCode) return currentRoomCode;
+            const stored = loadRoomFromStorage();
+            if (stored) return stored;
+            return generateRoomCode();
+        }
+
         function setupHost(preferredCode) {
-            // Always prefer the locked code during the lock window
-            let code = preferredCode;
-            if (!code && isRoomCodeLocked()) code = currentRoomCode;
-            if (!code) code = generateRoomCode();
+            const code = resolveHostCode(preferredCode);
 
-            destroyPeer(true); // keep locked code while recreating
+            // Soft path: if peer exists with same id and only disconnected, just reconnect
+            if (peer && !peer.destroyed && peer.id === code && peer.disconnected) {
+                document.getElementById('hostStatus').textContent = 'Reconnecting to room ' + code + '...';
+                document.getElementById('hostStatus').className = 'status';
+                try {
+                    peer.reconnect();
+                    return;
+                } catch (e) {
+                    // fall through to full recreate
+                }
+            }
+
+            destroyPeer(true); // ALWAYS keep room code
             hostRecreating = false;
+            lockRoomCode(code);
 
-            currentRoomCode = code;
             document.getElementById('roomCodeDisplay').textContent = code;
-            document.getElementById('hostStatus').textContent = 'Creating room ' + code + '...';
+            document.getElementById('hostStatus').textContent = 'Opening room ' + code + '...';
             document.getElementById('hostStatus').className = 'status';
-            // Don't clear share status on reconnect — user may have already copied link
 
             peer = new Peer(code, PEER_OPTS);
 
@@ -876,7 +911,7 @@
                 lockRoomCode(id);
                 hostSameCodeAttempts = 0;
                 document.getElementById('roomCodeDisplay').textContent = id;
-                document.getElementById('hostStatus').textContent = 'Waiting for opponent... room held 300s';
+                document.getElementById('hostStatus').textContent = 'Waiting for opponent to join... (' + id + ')';
                 document.getElementById('hostStatus').className = 'status success';
                 startHostKeepAlive();
             });
@@ -893,94 +928,105 @@
 
             peer.on('disconnected', () => {
                 if (mode === 'host' && !isConnected && peer && !peer.destroyed) {
-                    document.getElementById('hostStatus').textContent = 'Connection lost, reconnecting (same code)...';
+                    document.getElementById('hostStatus').textContent =
+                        'Connection lost — reconnecting to ' + (currentRoomCode || code) + '...';
                     document.getElementById('hostStatus').className = 'status error';
-                    try {
-                        peer.reconnect();
-                    } catch (e) {
-                        scheduleHostRecreate(true); // same code
-                    }
+                    // Soft reconnect only — never generate a new code
+                    setTimeout(() => {
+                        if (mode !== 'host' || isConnected || !peer || peer.destroyed) return;
+                        try {
+                            peer.reconnect();
+                        } catch (e) {
+                            scheduleHostRecreate(3000);
+                        }
+                    }, 500);
                 }
             });
 
             peer.on('error', err => {
                 console.error('Host peer error:', err.type, err);
+                // NEVER change the room code automatically
+                hostSameCodeAttempts++;
+                const label = currentRoomCode || code;
+
                 if (err.type === 'unavailable-id') {
-                    // ID still held by broker after a brief disconnect — retry SAME code
-                    hostSameCodeAttempts++;
-                    if (isRoomCodeLocked() || hostSameCodeAttempts < 6) {
-                        document.getElementById('hostStatus').textContent =
-                            'Room busy, retrying same code (' + hostSameCodeAttempts + ')...';
-                        document.getElementById('hostStatus').className = 'status error';
-                        scheduleHostRecreate(true, 2500); // wait longer, same code
-                    } else {
-                        // Only change code after many failures past the lock window
-                        document.getElementById('hostStatus').textContent = 'Getting a new room code...';
-                        document.getElementById('hostStatus').className = 'status error';
-                        currentRoomCode = null;
-                        roomCodeLockedUntil = 0;
-                        hostSameCodeAttempts = 0;
-                        scheduleHostRecreate(false, 1000);
-                    }
-                } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
-                    document.getElementById('hostStatus').textContent = 'Network issue, reconnecting (same code)...';
+                    // Broker still has this ID from a previous socket — wait, then retry SAME code
+                    document.getElementById('hostStatus').textContent =
+                        'Room ' + label + ' busy on server, retrying (' + hostSameCodeAttempts + ')...';
                     document.getElementById('hostStatus').className = 'status error';
-                    scheduleHostRecreate(true, 1500);
+                    scheduleHostRecreate(3000 + Math.min(hostSameCodeAttempts, 10) * 500);
+                } else if (err.type === 'network' || err.type === 'server-error' ||
+                           err.type === 'socket-error' || err.type === 'socket-closed') {
+                    document.getElementById('hostStatus').textContent =
+                        'Network issue — restoring room ' + label + '...';
+                    document.getElementById('hostStatus').className = 'status error';
+                    scheduleHostRecreate(2000);
                 } else {
-                    document.getElementById('hostStatus').textContent = 'Error: ' + err.type + ' — reconnecting...';
+                    document.getElementById('hostStatus').textContent =
+                        'Error (' + err.type + ') — restoring room ' + label + '...';
                     document.getElementById('hostStatus').className = 'status error';
-                    scheduleHostRecreate(true, 2000);
+                    scheduleHostRecreate(2000);
                 }
             });
         }
 
-        function scheduleHostRecreate(useSameCode, delayMs) {
+        function scheduleHostRecreate(delayMs) {
             if (hostRecreating || mode !== 'host') return;
             hostRecreating = true;
-            const delay = delayMs || 1500;
+            const delay = delayMs || 2000;
             setTimeout(() => {
                 hostRecreating = false;
                 if (mode !== 'host' || isConnected) return;
-                if (useSameCode && currentRoomCode) {
-                    setupHost(currentRoomCode);
-                } else if (isRoomCodeLocked()) {
-                    setupHost(currentRoomCode);
-                } else {
-                    setupHost(null);
-                }
+                // ALWAYS same code
+                const code = currentRoomCode || loadRoomFromStorage();
+                if (code) setupHost(code);
+                else setupHost(null);
             }, delay);
         }
 
-        // Keep host alive when returning to the tab/app
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState !== 'visible') return;
+        function restoreHostIfNeeded() {
             if (mode !== 'host' || isConnected) return;
-            document.getElementById('hostStatus').textContent = 'Back — restoring room ' + (currentRoomCode || '') + '...';
+            const code = currentRoomCode || loadRoomFromStorage();
+            document.getElementById('hostStatus').textContent =
+                'Back — restoring room ' + (code || '') + '...';
             document.getElementById('hostStatus').className = 'status';
-            if (!peer || peer.destroyed) {
-                scheduleHostRecreate(true, 300);
-            } else if (peer.disconnected) {
-                try {
-                    peer.reconnect();
-                } catch (e) {
-                    scheduleHostRecreate(true, 500);
+
+            if (peer && !peer.destroyed) {
+                if (peer.disconnected) {
+                    try {
+                        peer.reconnect();
+                        return;
+                    } catch (e) {
+                        scheduleHostRecreate(500);
+                        return;
+                    }
                 }
-            } else {
-                // Already connected to broker
-                document.getElementById('hostStatus').textContent = 'Waiting for opponent to join...';
+                // Peer looks fine
+                document.getElementById('roomCodeDisplay').textContent = peer.id || code || '----';
+                document.getElementById('hostStatus').textContent =
+                    'Waiting for opponent to join... (' + (peer.id || code || '') + ')';
                 document.getElementById('hostStatus').className = 'status success';
                 startHostKeepAlive();
+                return;
+            }
+            scheduleHostRecreate(400);
+        }
+
+        // Mobile: app-switch hides the page. Restore the SAME room when visible again.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                restoreHostIfNeeded();
             }
         });
-
-        window.addEventListener('pagehide', () => {
-            // Don't destroy on mobile app-switch if possible — only on real unload
+        window.addEventListener('focus', () => {
+            restoreHostIfNeeded();
+        });
+        window.addEventListener('pageshow', () => {
+            restoreHostIfNeeded();
         });
 
-        window.addEventListener('beforeunload', () => {
-            // Only full destroy when leaving the page for real
-            destroyPeer(false);
-        });
+        // CRITICAL: do NOT destroy peer on beforeunload/pagehide.
+        // On mobile those fire when switching apps, which was changing/killing the room.
 
         async function copyShareLink() {
             const code = currentRoomCode || document.getElementById('roomCodeDisplay').textContent;
@@ -989,13 +1035,10 @@
                 document.getElementById('shareStatus').className = 'status error';
                 return;
             }
-            // Extend lock when sharing so code stays stable while user pastes the link
             lockRoomCode(code);
 
             if (peer && peer.disconnected) {
-                document.getElementById('shareStatus').textContent = 'Reconnecting with same code...';
-                document.getElementById('shareStatus').className = 'status error';
-                try { peer.reconnect(); } catch (e) { scheduleHostRecreate(true, 500); }
+                try { peer.reconnect(); } catch (e) { scheduleHostRecreate(500); }
             }
             const link = getShareLink(code);
             const statusEl = document.getElementById('shareStatus');
@@ -1012,7 +1055,7 @@
                     document.execCommand('copy');
                     document.body.removeChild(ta);
                 }
-                statusEl.textContent = 'Link copied! Same room code held for 5 min — you can switch apps.';
+                statusEl.textContent = 'Link copied for room ' + code + '. Come back here after sending.';
                 statusEl.className = 'status success';
             } catch (e) {
                 statusEl.textContent = link;
@@ -1027,7 +1070,7 @@
             document.getElementById('joinStatus').textContent =
                 joinRetryCount > 0
                     ? 'Host not found, retrying (' + joinRetryCount + '/' + MAX_JOIN_RETRIES + ')...'
-                    : 'Connecting...';
+                    : 'Connecting to ' + code + '...';
             document.getElementById('joinStatus').className = 'status';
 
             destroyPeer(false);
@@ -1070,7 +1113,7 @@
             joinRetryCount++;
             if (joinRetryCount > MAX_JOIN_RETRIES) {
                 document.getElementById('joinStatus').textContent =
-                    'Could not find host. Ask them to open the game again, then reload this link.';
+                    'Could not find host. Ask them to return to the game tab, then reload this link.';
                 document.getElementById('joinStatus').className = 'status error';
                 destroyPeer(false);
                 return;
@@ -1446,8 +1489,7 @@
         };
         document.getElementById('btnCancelHost').onclick = () => {
             mode = null;
-            destroyPeer();
-            currentRoomCode = null;
+            destroyPeer(false); // clears room code + storage
             showMenu();
         };
         document.getElementById('btnCancelJoin').onclick = () => {
