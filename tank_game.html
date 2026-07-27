@@ -192,6 +192,7 @@
             <div id="matchOverlay" style="display:none; position:absolute; inset:0; background:rgba(0,0,0,0.72); z-index:25; flex-direction:column; align-items:center; justify-content:center; gap:16px; pointer-events:auto;">
                 <div id="matchResultText" style="font-size:clamp(1.3rem,5.5vw,2.1rem); font-weight:bold; color:#fff; text-shadow:0 0 20px #00ff88; text-align:center; padding:0 16px;"></div>
                 <div style="font-size:0.95rem; color:#aaa;" id="matchScoreText"></div>
+                <div id="matchStatsText" style="font-size:0.85rem; color:#ccc; text-align:left; max-width:340px; line-height:1.55; background:rgba(0,0,0,0.35); padding:12px 16px; border-radius:10px;"></div>
                 <button class="btn" id="btnPlayAgain" style="max-width:260px;">Play Again</button>
                 <button class="btn danger" id="btnMatchMenu" style="max-width:260px;">Back to Menu</button>
             </div>
@@ -371,6 +372,8 @@
         const touchControls = document.getElementById('touchControls');
 
         let scores = [0, 0, 0, 0];
+        let shotsFired = [0, 0, 0, 0];
+        let hitsLanded = [0, 0, 0, 0];
         let gameOver = false, matchOver = false, currentRound = 1;
         let roundTransitionTimer = null;
         let mode = null; // 'local' | 'host' | 'client'
@@ -606,6 +609,7 @@
                     y: this.y + Math.sin(this.angle) * (this.radius + 6),
                     angle: this.angle
                 });
+                if (shotsFired[this.slot] !== undefined) shotsFired[this.slot]++;
                 playPew();
             }
             hitsWall(nx, ny) {
@@ -636,6 +640,7 @@
                         if (Math.hypot(b.x - o.x, b.y - o.y) < o.radius + BULLET_RADIUS) {
                             o.alive = false;
                             this.bullets.splice(i, 1);
+                            if (hitsLanded[this.slot] !== undefined) hitsLanded[this.slot]++;
                             playExplosion();
                             return o.slot;
                         }
@@ -1125,6 +1130,8 @@
             if (gameStarted || mode !== 'host') return;
             gameStarted = true;
             scores = [0, 0, 0, 0];
+            shotsFired = [0, 0, 0, 0];
+            hitsLanded = [0, 0, 0, 0];
             currentRound = 1;
             gameOver = false;
             matchOver = false;
@@ -1277,6 +1284,8 @@
 
         function applyHostState(data) {
             scores = data.scores || scores;
+            if (data.shotsFired) shotsFired = data.shotsFired;
+            if (data.hitsLanded) hitsLanded = data.hitsLanded;
             currentRound = data.currentRound || currentRound;
             gameOver = !!data.gameOver;
             matchOver = !!data.matchOver;
@@ -1341,6 +1350,8 @@
                 type: 'state',
                 tanks,
                 scores,
+                shotsFired,
+                hitsLanded,
                 currentRound,
                 gameOver,
                 matchOver,
@@ -1439,6 +1450,8 @@
         function startNewMatch(send) {
             if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
             scores = [0, 0, 0, 0];
+            shotsFired = [0, 0, 0, 0];
+            hitsLanded = [0, 0, 0, 0];
             currentRound = 1;
             gameOver = false;
             matchOver = false;
@@ -1498,6 +1511,21 @@
             }
         }
 
+        function formatMatchStats() {
+            const lines = [];
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                const participated = (slots[i] && slots[i].active) || scores[i] > 0 || shotsFired[i] > 0;
+                if (!participated) continue;
+                const shots = shotsFired[i] || 0;
+                const hits = hitsLanded[i] || 0;
+                const acc = shots > 0 ? Math.round((hits / shots) * 100) : 0;
+                lines.push(
+                    PLAYER_NAMES[i] + ':  ' + shots + ' shots  ·  ' + hits + ' hits  ·  ' + acc + '% accuracy'
+                );
+            }
+            return lines.join('\n');
+        }
+
         function showMatchOver(winnerSlot) {
             matchOver = true;
             gameOver = true;
@@ -1506,6 +1534,11 @@
             document.getElementById('matchScoreText').textContent =
                 scores.map((s, i) => (slots[i] && slots[i].active) || s > 0 ? PLAYER_NAMES[i] + ': ' + s : null)
                     .filter(Boolean).join('  ·  ');
+            const statsEl = document.getElementById('matchStatsText');
+            if (statsEl) {
+                statsEl.textContent = formatMatchStats();
+                statsEl.style.whiteSpace = 'pre-line';
+            }
             document.getElementById('matchOverlay').style.display = 'flex';
             const playBtn = document.getElementById('btnPlayAgain');
             if (mode === 'client') {
