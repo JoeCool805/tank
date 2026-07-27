@@ -782,48 +782,103 @@
                 ]
             }
         };
+        // Keep the same room code for at least 300s so sharing a link still works
+        const ROOM_CODE_LOCK_MS = 300000;
         let currentRoomCode = null;
+        let roomCodeLockedUntil = 0;
         let hostRecreating = false;
+        let hostSameCodeAttempts = 0;
+        let hostKeepAliveTimer = null;
         let joinRetryCount = 0;
-        const MAX_JOIN_RETRIES = 5;
+        const MAX_JOIN_RETRIES = 12; // ~30s of retries while host switches apps
 
         function getShareLink(code) {
             return GAME_BASE_URL + '?room=' + encodeURIComponent(code);
         }
 
-        function destroyPeer() {
+        function lockRoomCode(code) {
+            currentRoomCode = code;
+            roomCodeLockedUntil = Date.now() + ROOM_CODE_LOCK_MS;
+        }
+
+        function isRoomCodeLocked() {
+            return currentRoomCode && Date.now() < roomCodeLockedUntil;
+        }
+
+        function clearHostKeepAlive() {
+            if (hostKeepAliveTimer) {
+                clearInterval(hostKeepAliveTimer);
+                hostKeepAliveTimer = null;
+            }
+        }
+
+        function startHostKeepAlive() {
+            clearHostKeepAlive();
+            // Periodic light activity while waiting — helps some mobile browsers
+            // not suspend the tab as aggressively while the room is held
+            hostKeepAliveTimer = setInterval(() => {
+                if (mode !== 'host' || isConnected) {
+                    clearHostKeepAlive();
+                    return;
+                }
+                if (peer && !peer.destroyed && peer.disconnected) {
+                    try { peer.reconnect(); } catch (e) {}
+                }
+                // Touch the status text so the page did some work
+                const el = document.getElementById('hostStatus');
+                if (el && peer && !peer.destroyed && !peer.disconnected) {
+                    const left = Math.max(0, Math.ceil((roomCodeLockedUntil - Date.now()) / 1000));
+                    if (left > 0) {
+                        el.textContent = 'Waiting for opponent... room held ' + left + 's';
+                    } else {
+                        el.textContent = 'Waiting for opponent to join...';
+                    }
+                    el.className = 'status success';
+                }
+            }, 3000);
+        }
+
+        function destroyPeer(keepRoomCode) {
+            clearHostKeepAlive();
             if (conn) {
                 try { conn.close(); } catch (e) {}
                 conn = null;
             }
             if (peer) {
-                try {
-                    peer.destroy();
-                } catch (e) {}
+                try { peer.destroy(); } catch (e) {}
                 peer = null;
             }
             isConnected = false;
+            if (!keepRoomCode) {
+                currentRoomCode = null;
+                roomCodeLockedUntil = 0;
+            }
         }
 
         function setupHost(preferredCode) {
-            destroyPeer();
+            // Always prefer the locked code during the lock window
+            let code = preferredCode;
+            if (!code && isRoomCodeLocked()) code = currentRoomCode;
+            if (!code) code = generateRoomCode();
+
+            destroyPeer(true); // keep locked code while recreating
             hostRecreating = false;
 
-            const code = preferredCode || generateRoomCode();
             currentRoomCode = code;
             document.getElementById('roomCodeDisplay').textContent = code;
-            document.getElementById('hostStatus').textContent = 'Creating room...';
+            document.getElementById('hostStatus').textContent = 'Creating room ' + code + '...';
             document.getElementById('hostStatus').className = 'status';
-            document.getElementById('shareStatus').textContent = '';
-            document.getElementById('shareStatus').className = 'status';
+            // Don't clear share status on reconnect — user may have already copied link
 
             peer = new Peer(code, PEER_OPTS);
 
             peer.on('open', id => {
-                currentRoomCode = id;
+                lockRoomCode(id);
+                hostSameCodeAttempts = 0;
                 document.getElementById('roomCodeDisplay').textContent = id;
-                document.getElementById('hostStatus').textContent = 'Waiting for opponent to join... (keep this page open)';
+                document.getElementById('hostStatus').textContent = 'Waiting for opponent... room held 300s';
                 document.getElementById('hostStatus').className = 'status success';
+                startHostKeepAlive();
             });
 
             peer.on('connection', connection => {
@@ -832,19 +887,18 @@
                     return;
                 }
                 conn = connection;
+                clearHostKeepAlive();
                 setupConnection();
             });
 
             peer.on('disconnected', () => {
-                // Broker connection lost — try to reconnect with same ID
                 if (mode === 'host' && !isConnected && peer && !peer.destroyed) {
-                    document.getElementById('hostStatus').textContent = 'Connection lost, reconnecting...';
+                    document.getElementById('hostStatus').textContent = 'Connection lost, reconnecting (same code)...';
                     document.getElementById('hostStatus').className = 'status error';
                     try {
                         peer.reconnect();
                     } catch (e) {
-                        // recreate room with same code
-                        scheduleHostRecreate(currentRoomCode);
+                        scheduleHostRecreate(true); // same code
                     }
                 }
             });
@@ -852,50 +906,80 @@
             peer.on('error', err => {
                 console.error('Host peer error:', err.type, err);
                 if (err.type === 'unavailable-id') {
-                    // Code taken — pick a new one
-                    scheduleHostRecreate(null);
-                } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error') {
-                    document.getElementById('hostStatus').textContent = 'Network issue, reconnecting...';
+                    // ID still held by broker after a brief disconnect — retry SAME code
+                    hostSameCodeAttempts++;
+                    if (isRoomCodeLocked() || hostSameCodeAttempts < 6) {
+                        document.getElementById('hostStatus').textContent =
+                            'Room busy, retrying same code (' + hostSameCodeAttempts + ')...';
+                        document.getElementById('hostStatus').className = 'status error';
+                        scheduleHostRecreate(true, 2500); // wait longer, same code
+                    } else {
+                        // Only change code after many failures past the lock window
+                        document.getElementById('hostStatus').textContent = 'Getting a new room code...';
+                        document.getElementById('hostStatus').className = 'status error';
+                        currentRoomCode = null;
+                        roomCodeLockedUntil = 0;
+                        hostSameCodeAttempts = 0;
+                        scheduleHostRecreate(false, 1000);
+                    }
+                } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed') {
+                    document.getElementById('hostStatus').textContent = 'Network issue, reconnecting (same code)...';
                     document.getElementById('hostStatus').className = 'status error';
-                    scheduleHostRecreate(currentRoomCode);
+                    scheduleHostRecreate(true, 1500);
                 } else {
-                    document.getElementById('hostStatus').textContent = 'Error: ' + err.type + ' — try Host again';
+                    document.getElementById('hostStatus').textContent = 'Error: ' + err.type + ' — reconnecting...';
                     document.getElementById('hostStatus').className = 'status error';
+                    scheduleHostRecreate(true, 2000);
                 }
             });
         }
 
-        function scheduleHostRecreate(code) {
+        function scheduleHostRecreate(useSameCode, delayMs) {
             if (hostRecreating || mode !== 'host') return;
             hostRecreating = true;
+            const delay = delayMs || 1500;
             setTimeout(() => {
-                if (mode === 'host' && !isConnected) {
-                    setupHost(code);
+                hostRecreating = false;
+                if (mode !== 'host' || isConnected) return;
+                if (useSameCode && currentRoomCode) {
+                    setupHost(currentRoomCode);
+                } else if (isRoomCodeLocked()) {
+                    setupHost(currentRoomCode);
                 } else {
-                    hostRecreating = false;
+                    setupHost(null);
                 }
-            }, 1500);
+            }, delay);
         }
 
         // Keep host alive when returning to the tab/app
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState !== 'visible') return;
-            if (mode !== 'host' || isConnected || !peer) return;
-            if (peer.destroyed) {
-                scheduleHostRecreate(currentRoomCode);
+            if (mode !== 'host' || isConnected) return;
+            document.getElementById('hostStatus').textContent = 'Back — restoring room ' + (currentRoomCode || '') + '...';
+            document.getElementById('hostStatus').className = 'status';
+            if (!peer || peer.destroyed) {
+                scheduleHostRecreate(true, 300);
             } else if (peer.disconnected) {
-                document.getElementById('hostStatus').textContent = 'Reconnecting...';
-                document.getElementById('hostStatus').className = 'status';
                 try {
                     peer.reconnect();
                 } catch (e) {
-                    scheduleHostRecreate(currentRoomCode);
+                    scheduleHostRecreate(true, 500);
                 }
+            } else {
+                // Already connected to broker
+                document.getElementById('hostStatus').textContent = 'Waiting for opponent to join...';
+                document.getElementById('hostStatus').className = 'status success';
+                startHostKeepAlive();
             }
         });
 
+        window.addEventListener('pagehide', () => {
+            // Don't destroy on mobile app-switch if possible — only on real unload
+        });
+
         window.addEventListener('beforeunload', () => {
-            destroyPeer();
+            // Only full destroy when leaving the page for real
+            destroyPeer(false);
         });
 
         async function copyShareLink() {
@@ -905,12 +989,13 @@
                 document.getElementById('shareStatus').className = 'status error';
                 return;
             }
-            // Warn host to keep tab open
+            // Extend lock when sharing so code stays stable while user pastes the link
+            lockRoomCode(code);
+
             if (peer && peer.disconnected) {
-                document.getElementById('shareStatus').textContent = 'Reconnecting first... stay on this page!';
+                document.getElementById('shareStatus').textContent = 'Reconnecting with same code...';
                 document.getElementById('shareStatus').className = 'status error';
-                try { peer.reconnect(); } catch (e) { scheduleHostRecreate(code); }
-                return;
+                try { peer.reconnect(); } catch (e) { scheduleHostRecreate(true, 500); }
             }
             const link = getShareLink(code);
             const statusEl = document.getElementById('shareStatus');
@@ -927,7 +1012,7 @@
                     document.execCommand('copy');
                     document.body.removeChild(ta);
                 }
-                statusEl.textContent = 'Link copied! Keep this page open until they join.';
+                statusEl.textContent = 'Link copied! Same room code held for 5 min — you can switch apps.';
                 statusEl.className = 'status success';
             } catch (e) {
                 statusEl.textContent = link;
@@ -945,7 +1030,7 @@
                     : 'Connecting...';
             document.getElementById('joinStatus').className = 'status';
 
-            destroyPeer();
+            destroyPeer(false);
 
             peer = new Peer(PEER_OPTS);
 
@@ -955,7 +1040,6 @@
                     serialization: 'json'
                 });
 
-                // peer-unavailable often fires on the connection, not the peer
                 conn.on('error', err => {
                     console.error('Join conn error:', err);
                     retryJoin(code);
@@ -963,12 +1047,11 @@
 
                 setupConnection();
 
-                // If connection doesn't open quickly, retry
                 setTimeout(() => {
                     if (!isConnected && mode === 'client') {
                         retryJoin(code);
                     }
-                }, 4000);
+                }, 5000);
             });
 
             peer.on('error', err => {
@@ -987,14 +1070,14 @@
             joinRetryCount++;
             if (joinRetryCount > MAX_JOIN_RETRIES) {
                 document.getElementById('joinStatus').textContent =
-                    'Could not find host. Make sure they kept the game open, then try again.';
+                    'Could not find host. Ask them to open the game again, then reload this link.';
                 document.getElementById('joinStatus').className = 'status error';
-                destroyPeer();
+                destroyPeer(false);
                 return;
             }
             setTimeout(() => {
                 if (mode === 'client' && !isConnected) setupJoin(code, true);
-            }, 1500);
+            }, 2500);
         }
 
         function setupConnection() {
