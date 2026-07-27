@@ -769,14 +769,47 @@
         }
 
         const GAME_BASE_URL = 'https://joecool805.github.io/tank/tank_game.html';
+        const PEER_OPTS = {
+            host: '0.peerjs.com',
+            port: 443,
+            path: '/',
+            secure: true,
+            debug: 1,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            }
+        };
         let currentRoomCode = null;
+        let hostRecreating = false;
+        let joinRetryCount = 0;
+        const MAX_JOIN_RETRIES = 5;
 
         function getShareLink(code) {
             return GAME_BASE_URL + '?room=' + encodeURIComponent(code);
         }
 
-        function setupHost() {
-            const code = generateRoomCode();
+        function destroyPeer() {
+            if (conn) {
+                try { conn.close(); } catch (e) {}
+                conn = null;
+            }
+            if (peer) {
+                try {
+                    peer.destroy();
+                } catch (e) {}
+                peer = null;
+            }
+            isConnected = false;
+        }
+
+        function setupHost(preferredCode) {
+            destroyPeer();
+            hostRecreating = false;
+
+            const code = preferredCode || generateRoomCode();
             currentRoomCode = code;
             document.getElementById('roomCodeDisplay').textContent = code;
             document.getElementById('hostStatus').textContent = 'Creating room...';
@@ -784,32 +817,86 @@
             document.getElementById('shareStatus').textContent = '';
             document.getElementById('shareStatus').className = 'status';
 
-            peer = new Peer(code, { debug: 1 });
+            peer = new Peer(code, PEER_OPTS);
 
             peer.on('open', id => {
                 currentRoomCode = id;
                 document.getElementById('roomCodeDisplay').textContent = id;
-                document.getElementById('hostStatus').textContent = 'Waiting for opponent to join...';
+                document.getElementById('hostStatus').textContent = 'Waiting for opponent to join... (keep this page open)';
                 document.getElementById('hostStatus').className = 'status success';
             });
 
             peer.on('connection', connection => {
-                if (conn) { connection.close(); return; }
+                if (conn && conn.open) {
+                    connection.close();
+                    return;
+                }
                 conn = connection;
                 setupConnection();
             });
 
+            peer.on('disconnected', () => {
+                // Broker connection lost — try to reconnect with same ID
+                if (mode === 'host' && !isConnected && peer && !peer.destroyed) {
+                    document.getElementById('hostStatus').textContent = 'Connection lost, reconnecting...';
+                    document.getElementById('hostStatus').className = 'status error';
+                    try {
+                        peer.reconnect();
+                    } catch (e) {
+                        // recreate room with same code
+                        scheduleHostRecreate(currentRoomCode);
+                    }
+                }
+            });
+
             peer.on('error', err => {
-                console.error(err);
+                console.error('Host peer error:', err.type, err);
                 if (err.type === 'unavailable-id') {
-                    peer.destroy();
-                    setupHost();
+                    // Code taken — pick a new one
+                    scheduleHostRecreate(null);
+                } else if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error') {
+                    document.getElementById('hostStatus').textContent = 'Network issue, reconnecting...';
+                    document.getElementById('hostStatus').className = 'status error';
+                    scheduleHostRecreate(currentRoomCode);
                 } else {
-                    document.getElementById('hostStatus').textContent = 'Error: ' + err.type;
+                    document.getElementById('hostStatus').textContent = 'Error: ' + err.type + ' — try Host again';
                     document.getElementById('hostStatus').className = 'status error';
                 }
             });
         }
+
+        function scheduleHostRecreate(code) {
+            if (hostRecreating || mode !== 'host') return;
+            hostRecreating = true;
+            setTimeout(() => {
+                if (mode === 'host' && !isConnected) {
+                    setupHost(code);
+                } else {
+                    hostRecreating = false;
+                }
+            }, 1500);
+        }
+
+        // Keep host alive when returning to the tab/app
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible') return;
+            if (mode !== 'host' || isConnected || !peer) return;
+            if (peer.destroyed) {
+                scheduleHostRecreate(currentRoomCode);
+            } else if (peer.disconnected) {
+                document.getElementById('hostStatus').textContent = 'Reconnecting...';
+                document.getElementById('hostStatus').className = 'status';
+                try {
+                    peer.reconnect();
+                } catch (e) {
+                    scheduleHostRecreate(currentRoomCode);
+                }
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            destroyPeer();
+        });
 
         async function copyShareLink() {
             const code = currentRoomCode || document.getElementById('roomCodeDisplay').textContent;
@@ -818,13 +905,19 @@
                 document.getElementById('shareStatus').className = 'status error';
                 return;
             }
+            // Warn host to keep tab open
+            if (peer && peer.disconnected) {
+                document.getElementById('shareStatus').textContent = 'Reconnecting first... stay on this page!';
+                document.getElementById('shareStatus').className = 'status error';
+                try { peer.reconnect(); } catch (e) { scheduleHostRecreate(code); }
+                return;
+            }
             const link = getShareLink(code);
             const statusEl = document.getElementById('shareStatus');
             try {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                     await navigator.clipboard.writeText(link);
                 } else {
-                    // Fallback
                     const ta = document.createElement('textarea');
                     ta.value = link;
                     ta.style.position = 'fixed';
@@ -834,7 +927,7 @@
                     document.execCommand('copy');
                     document.body.removeChild(ta);
                 }
-                statusEl.textContent = 'Link copied! Send it to your friend.';
+                statusEl.textContent = 'Link copied! Keep this page open until they join.';
                 statusEl.className = 'status success';
             } catch (e) {
                 statusEl.textContent = link;
@@ -842,22 +935,66 @@
             }
         }
 
-        function setupJoin(code) {
-            document.getElementById('joinStatus').textContent = 'Connecting...';
+        function setupJoin(code, isRetry) {
+            if (!isRetry) joinRetryCount = 0;
+            code = (code || '').toUpperCase();
+
+            document.getElementById('joinStatus').textContent =
+                joinRetryCount > 0
+                    ? 'Host not found, retrying (' + joinRetryCount + '/' + MAX_JOIN_RETRIES + ')...'
+                    : 'Connecting...';
             document.getElementById('joinStatus').className = 'status';
 
-            peer = new Peer({ debug: 1 });
+            destroyPeer();
+
+            peer = new Peer(PEER_OPTS);
 
             peer.on('open', () => {
-                conn = peer.connect(code.toUpperCase(), { reliable: true });
+                conn = peer.connect(code, {
+                    reliable: true,
+                    serialization: 'json'
+                });
+
+                // peer-unavailable often fires on the connection, not the peer
+                conn.on('error', err => {
+                    console.error('Join conn error:', err);
+                    retryJoin(code);
+                });
+
                 setupConnection();
+
+                // If connection doesn't open quickly, retry
+                setTimeout(() => {
+                    if (!isConnected && mode === 'client') {
+                        retryJoin(code);
+                    }
+                }, 4000);
             });
 
             peer.on('error', err => {
-                console.error(err);
-                document.getElementById('joinStatus').textContent = 'Error: ' + (err.type || err.message);
-                document.getElementById('joinStatus').className = 'status error';
+                console.error('Join peer error:', err.type, err);
+                if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'server-error') {
+                    retryJoin(code);
+                } else {
+                    document.getElementById('joinStatus').textContent = 'Error: ' + (err.type || err.message);
+                    document.getElementById('joinStatus').className = 'status error';
+                }
             });
+        }
+
+        function retryJoin(code) {
+            if (mode !== 'client' || isConnected) return;
+            joinRetryCount++;
+            if (joinRetryCount > MAX_JOIN_RETRIES) {
+                document.getElementById('joinStatus').textContent =
+                    'Could not find host. Make sure they kept the game open, then try again.';
+                document.getElementById('joinStatus').className = 'status error';
+                destroyPeer();
+                return;
+            }
+            setTimeout(() => {
+                if (mode === 'client' && !isConnected) setupJoin(code, true);
+            }, 1500);
         }
 
         function setupConnection() {
@@ -1113,9 +1250,8 @@
                 clearTimeout(roundTransitionTimer);
                 roundTransitionTimer = null;
             }
-            if (conn) { try { conn.close(); } catch(e){} conn = null; }
-            if (peer) { try { peer.destroy(); } catch(e){} peer = null; }
-            isConnected = false;
+            destroyPeer();
+            currentRoomCode = null;
             mode = null;
             matchOver = false;
             hideMatchOverlay();
@@ -1226,14 +1362,14 @@
             document.getElementById('joinPanel').style.display = 'block';
         };
         document.getElementById('btnCancelHost').onclick = () => {
-            if (peer) peer.destroy();
-            peer = null;
+            mode = null;
+            destroyPeer();
             currentRoomCode = null;
             showMenu();
         };
         document.getElementById('btnCancelJoin').onclick = () => {
-            if (peer) peer.destroy();
-            peer = null;
+            mode = null;
+            destroyPeer();
             showMenu();
         };
         document.getElementById('btnDoJoin').onclick = () => {
