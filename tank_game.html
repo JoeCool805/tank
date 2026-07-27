@@ -143,9 +143,18 @@
     <h1>Tank Battle</h1>
 
     <div id="menu">
-        <button class="btn" id="btnLocal">Local 2-Player (Same Keyboard)</button>
+        <button class="btn" id="btnPractice">Practice vs Bots</button>
+        <button class="btn secondary" id="btnLocal">Local 2-Player (Same Keyboard)</button>
         <button class="btn secondary" id="btnHost">Host Online Game (up to 4)</button>
         <button class="btn secondary" id="btnJoin">Join Online Game</button>
+
+        <div id="practicePanel" style="display:none; width:100%;">
+            <div class="hint" style="margin-bottom:8px; text-align:center;">How many bots?</div>
+            <button class="btn" id="btnBots1">1 Bot</button>
+            <button class="btn" id="btnBots2" style="margin-top:8px;">2 Bots</button>
+            <button class="btn" id="btnBots3" style="margin-top:8px;">3 Bots</button>
+            <button class="btn danger" id="btnCancelPractice" style="margin-top:12px;">Cancel</button>
+        </div>
 
         <div id="hostPanel" style="display:none; width:100%;">
             <div class="room-box">
@@ -203,7 +212,7 @@
 
     <script>
         const TANK_SIZE = 28, BULLET_SPEED = 7, TANK_SPEED = 2.8, ROT_SPEED = 0.055;
-        const FIRE_COOLDOWN = 400, BULLET_RADIUS = 4, WALL_THICKNESS = 20, TICK_RATE = 1000 / 30;
+        const FIRE_COOLDOWN = 400, BOT_FIRE_COOLDOWN = 1200, BULLET_RADIUS = 4, WALL_THICKNESS = 20, TICK_RATE = 1000 / 30;
         const MAX_PLAYERS = 4;
         const PLAYER_COLORS = ['#00aaff', '#ff4444', '#44ff88', '#ffaa00'];
         const PLAYER_NAMES = ['P1 Blue', 'P2 Red', 'P3 Green', 'P4 Orange'];
@@ -211,17 +220,146 @@
             { x: 100, y: 120 }, { x: 700, y: 120 },
             { x: 100, y: 380 }, { x: 700, y: 380 }
         ];
-        const walls = [
-            { x: 0, y: 0, w: 800, h: WALL_THICKNESS },
-            { x: 0, y: 500 - WALL_THICKNESS, w: 800, h: WALL_THICKNESS },
-            { x: 0, y: 0, w: WALL_THICKNESS, h: 500 },
-            { x: 800 - WALL_THICKNESS, y: 0, w: WALL_THICKNESS, h: 500 },
-            { x: 180, y: 120, w: 30, h: 180 },
-            { x: 590, y: 200, w: 30, h: 180 },
-            { x: 300, y: 80, w: 200, h: 25 },
-            { x: 300, y: 395, w: 200, h: 25 },
-            { x: 380, y: 200, w: 40, h: 100 },
-        ];
+        // Destructible wall grid (cell-based so shots can punch holes)
+        const CELL = 25;
+        const COLS = 32; // 800 / 25
+        const ROWS = 20; // 500 / 25
+        const BORDER = 1; // solid border cells
+        let wallGrid = []; // wallGrid[row][col] = true if solid
+
+        function clearSpawnAreas() {
+            for (const s of SPAWNS) {
+                const cx = Math.floor(s.x / CELL);
+                const cy = Math.floor(s.y / CELL);
+                for (let dy = -2; dy <= 2; dy++) {
+                    for (let dx = -2; dx <= 2; dx++) {
+                        const c = cx + dx, r = cy + dy;
+                        if (r > BORDER - 1 && r < ROWS - BORDER && c > BORDER - 1 && c < COLS - BORDER) {
+                            if (wallGrid[r] && wallGrid[r][c] !== undefined) wallGrid[r][c] = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        function generateWalls() {
+            wallGrid = [];
+            for (let r = 0; r < ROWS; r++) {
+                wallGrid[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    const isBorder = r < BORDER || r >= ROWS - BORDER || c < BORDER || c >= COLS - BORDER;
+                    wallGrid[r][c] = isBorder;
+                }
+            }
+
+            // Random pillars / blocks
+            const pillars = 6 + Math.floor(Math.random() * 6);
+            for (let i = 0; i < pillars; i++) {
+                const w = 1 + Math.floor(Math.random() * 3);
+                const h = 1 + Math.floor(Math.random() * 4);
+                const c0 = BORDER + 2 + Math.floor(Math.random() * (COLS - BORDER * 2 - w - 4));
+                const r0 = BORDER + 2 + Math.floor(Math.random() * (ROWS - BORDER * 2 - h - 4));
+                for (let r = r0; r < r0 + h; r++)
+                    for (let c = c0; c < c0 + w; c++)
+                        if (r < ROWS - BORDER && c < COLS - BORDER) wallGrid[r][c] = true;
+            }
+
+            // Random horizontal bars
+            const hBars = 2 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < hBars; i++) {
+                const len = 3 + Math.floor(Math.random() * 6);
+                const c0 = BORDER + 2 + Math.floor(Math.random() * (COLS - BORDER * 2 - len - 2));
+                const r0 = BORDER + 2 + Math.floor(Math.random() * (ROWS - BORDER * 2 - 2));
+                for (let c = c0; c < c0 + len; c++) wallGrid[r0][c] = true;
+            }
+
+            // Random vertical bars
+            const vBars = 2 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < vBars; i++) {
+                const len = 3 + Math.floor(Math.random() * 5);
+                const r0 = BORDER + 2 + Math.floor(Math.random() * (ROWS - BORDER * 2 - len - 2));
+                const c0 = BORDER + 2 + Math.floor(Math.random() * (COLS - BORDER * 2 - 2));
+                for (let r = r0; r < r0 + len; r++) wallGrid[r][c0] = true;
+            }
+
+            // Occasional L-shapes
+            const elbows = 2 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < elbows; i++) {
+                const c0 = BORDER + 3 + Math.floor(Math.random() * (COLS - 10));
+                const r0 = BORDER + 3 + Math.floor(Math.random() * (ROWS - 10));
+                const len = 2 + Math.floor(Math.random() * 3);
+                for (let k = 0; k < len; k++) {
+                    wallGrid[r0][c0 + k] = true;
+                    wallGrid[r0 + k][c0] = true;
+                }
+            }
+
+            clearSpawnAreas();
+        }
+
+        function packWallGrid() {
+            const out = [];
+            for (let r = 0; r < ROWS; r++)
+                for (let c = 0; c < COLS; c++)
+                    out.push(wallGrid[r][c] ? 1 : 0);
+            return out;
+        }
+
+        function unpackWallGrid(arr) {
+            if (!arr || arr.length !== ROWS * COLS) return;
+            wallGrid = [];
+            let i = 0;
+            for (let r = 0; r < ROWS; r++) {
+                wallGrid[r] = [];
+                for (let c = 0; c < COLS; c++) wallGrid[r][c] = !!arr[i++];
+            }
+        }
+
+        function circleHitsWall(x, y, radius) {
+            const minC = Math.max(0, Math.floor((x - radius) / CELL));
+            const maxC = Math.min(COLS - 1, Math.floor((x + radius) / CELL));
+            const minR = Math.max(0, Math.floor((y - radius) / CELL));
+            const maxR = Math.min(ROWS - 1, Math.floor((y + radius) / CELL));
+            for (let r = minR; r <= maxR; r++) {
+                for (let c = minC; c <= maxC; c++) {
+                    if (!wallGrid[r] || !wallGrid[r][c]) continue;
+                    // Closest point on cell to circle center
+                    const cx = Math.max(c * CELL, Math.min(x, (c + 1) * CELL));
+                    const cy = Math.max(r * CELL, Math.min(y, (r + 1) * CELL));
+                    if ((cx - x) * (cx - x) + (cy - y) * (cy - y) < radius * radius) return true;
+                }
+            }
+            return false;
+        }
+
+        // Punch a hole in destructible (non-border) walls. Returns true if anything was destroyed.
+        function destroyWallAt(x, y, holeRadius) {
+            const minC = Math.max(0, Math.floor((x - holeRadius) / CELL));
+            const maxC = Math.min(COLS - 1, Math.floor((x + holeRadius) / CELL));
+            const minR = Math.max(0, Math.floor((y - holeRadius) / CELL));
+            const maxR = Math.min(ROWS - 1, Math.floor((y + holeRadius) / CELL));
+            let hit = false;
+            for (let r = minR; r <= maxR; r++) {
+                for (let c = minC; c <= maxC; c++) {
+                    if (!wallGrid[r] || !wallGrid[r][c]) continue;
+                    // Never destroy outer border
+                    if (r < BORDER || r >= ROWS - BORDER || c < BORDER || c >= COLS - BORDER) {
+                        hit = true; // still counts as a wall hit
+                        continue;
+                    }
+                    const cx = c * CELL + CELL / 2;
+                    const cy = r * CELL + CELL / 2;
+                    if (Math.hypot(cx - x, cy - y) <= holeRadius + CELL * 0.35) {
+                        wallGrid[r][c] = false;
+                        hit = true;
+                    }
+                }
+            }
+            return hit;
+        }
+
+        // Initial layout
+        generateWalls();
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -248,6 +386,164 @@
         // slots[i] = { active, peerId, conn, inputs, tank }
         let slots = [];
         let clientConn = null; // client -> host connection
+        let pendingSfx = []; // network: host queues sounds for clients
+
+        // ==================== SOUND EFFECTS (Web Audio) ====================
+        let audioCtx = null;
+        function ensureAudio() {
+            if (!audioCtx) {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!AC) return null;
+                audioCtx = new AC();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+        // Unlock audio on first tap/key (mobile browsers)
+        function unlockAudio() {
+            const ctx = ensureAudio();
+            if (!ctx) return;
+            const b = ctx.createBuffer(1, 1, 22050);
+            const s = ctx.createBufferSource();
+            s.buffer = b;
+            s.connect(ctx.destination);
+            s.start(0);
+        }
+        ['pointerdown', 'keydown', 'touchstart'].forEach(ev => {
+            window.addEventListener(ev, function once() {
+                unlockAudio();
+                window.removeEventListener(ev, once, true);
+            }, true);
+        });
+
+        function queueSfx(name) {
+            pendingSfx.push(name);
+        }
+
+        function playPew() {
+            const ctx = ensureAudio();
+            if (!ctx) return;
+            const t0 = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(880, t0);
+            osc.frequency.exponentialRampToValueAtTime(420, t0 + 0.09);
+            gain.gain.setValueAtTime(0.0001, t0);
+            gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.005);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.1);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t0);
+            osc.stop(t0 + 0.11);
+            queueSfx('pew');
+        }
+
+        function playExplosion() {
+            const ctx = ensureAudio();
+            if (!ctx) return;
+            const t0 = ctx.currentTime;
+            // Noise burst
+            const duration = 0.45;
+            const frames = Math.floor(ctx.sampleRate * duration);
+            const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < frames; i++) {
+                const env = Math.pow(1 - i / frames, 2.2);
+                data[i] = (Math.random() * 2 - 1) * env;
+            }
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            const noiseFilter = ctx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.setValueAtTime(1200, t0);
+            noiseFilter.frequency.exponentialRampToValueAtTime(180, t0 + 0.35);
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(0.35, t0);
+            noiseGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(ctx.destination);
+            noise.start(t0);
+            // Low boom
+            const osc = ctx.createOscillator();
+            const og = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(120, t0);
+            osc.frequency.exponentialRampToValueAtTime(35, t0 + 0.4);
+            og.gain.setValueAtTime(0.0001, t0);
+            og.gain.exponentialRampToValueAtTime(0.45, t0 + 0.01);
+            og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+            osc.connect(og);
+            og.connect(ctx.destination);
+            osc.start(t0);
+            osc.stop(t0 + 0.45);
+            queueSfx('boom');
+        }
+
+        function playSfxList(list) {
+            if (!list || !list.length) return;
+            for (const name of list) {
+                if (name === 'pew') playPewSilent();
+                else if (name === 'boom') playExplosionSilent();
+            }
+        }
+        // Silent variants for clients (don't re-queue to network)
+        function playPewSilent() {
+            const ctx = ensureAudio();
+            if (!ctx) return;
+            const t0 = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(880, t0);
+            osc.frequency.exponentialRampToValueAtTime(420, t0 + 0.09);
+            gain.gain.setValueAtTime(0.0001, t0);
+            gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.005);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.1);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t0);
+            osc.stop(t0 + 0.11);
+        }
+        function playExplosionSilent() {
+            const ctx = ensureAudio();
+            if (!ctx) return;
+            const t0 = ctx.currentTime;
+            const duration = 0.45;
+            const frames = Math.floor(ctx.sampleRate * duration);
+            const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < frames; i++) {
+                const env = Math.pow(1 - i / frames, 2.2);
+                data[i] = (Math.random() * 2 - 1) * env;
+            }
+            const noise = ctx.createBufferSource();
+            noise.buffer = buffer;
+            const noiseFilter = ctx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.setValueAtTime(1200, t0);
+            noiseFilter.frequency.exponentialRampToValueAtTime(180, t0 + 0.35);
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(0.35, t0);
+            noiseGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(ctx.destination);
+            noise.start(t0);
+            const osc = ctx.createOscillator();
+            const og = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(120, t0);
+            osc.frequency.exponentialRampToValueAtTime(35, t0 + 0.4);
+            og.gain.setValueAtTime(0.0001, t0);
+            og.gain.exponentialRampToValueAtTime(0.45, t0 + 0.01);
+            og.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+            osc.connect(og);
+            og.connect(ctx.destination);
+            osc.start(t0);
+            osc.stop(t0 + 0.45);
+        }
 
         class Tank {
             constructor(slot) {
@@ -290,7 +586,8 @@
                 } else if (!this.hitsWall(this.x, this.y + moveY) && !this.hitsTank(this.x, this.y + moveY, others)) {
                     this.y += moveY;
                 }
-                if (inputs.shoot && Date.now() - this.lastShot > FIRE_COOLDOWN) {
+                const cooldown = this.isBot ? BOT_FIRE_COOLDOWN : FIRE_COOLDOWN;
+                if (inputs.shoot && Date.now() - this.lastShot > cooldown) {
                     this.shoot();
                     this.lastShot = Date.now();
                 }
@@ -309,13 +606,10 @@
                     y: this.y + Math.sin(this.angle) * (this.radius + 6),
                     angle: this.angle
                 });
+                playPew();
             }
             hitsWall(nx, ny) {
-                for (const w of walls) {
-                    if (nx + this.radius > w.x && nx - this.radius < w.x + w.w &&
-                        ny + this.radius > w.y && ny - this.radius < w.y + w.h) return true;
-                }
-                return false;
+                return circleHitsWall(nx, ny, this.radius);
             }
             hitsTank(nx, ny, others) {
                 for (const o of others) {
@@ -325,9 +619,10 @@
                 return false;
             }
             bulletHitsWall(b) {
-                for (const w of walls) {
-                    if (b.x + BULLET_RADIUS > w.x && b.x - BULLET_RADIUS < w.x + w.w &&
-                        b.y + BULLET_RADIUS > w.y && b.y - BULLET_RADIUS < w.y + w.h) return true;
+                // Destructible: punch a hole, then remove the bullet
+                if (circleHitsWall(b.x, b.y, BULLET_RADIUS)) {
+                    destroyWallAt(b.x, b.y, CELL * 0.85);
+                    return true;
                 }
                 return false;
             }
@@ -341,6 +636,7 @@
                         if (Math.hypot(b.x - o.x, b.y - o.y) < o.radius + BULLET_RADIUS) {
                             o.alive = false;
                             this.bullets.splice(i, 1);
+                            playExplosion();
                             return o.slot;
                         }
                     }
@@ -440,14 +736,13 @@
                 const el = document.getElementById('score' + i);
                 if (!box || !el) continue;
                 el.textContent = scores[i];
-                const show = mode === 'local' ? i < 2 : slots[i] && slots[i].active;
-                // For client, slots may not be fully known — use scores presence from state
-                if (mode === 'client') {
-                    box.style.display = (i === 0 || i === 1 || scores[i] > 0 || (slots[i] && slots[i].active)) ? '' : (i < 2 ? '' : 'none');
+                if (mode === 'local') {
+                    box.style.display = i < 2 ? '' : 'none';
+                } else if (mode === 'practice' || mode === 'host' || mode === 'client') {
+                    box.style.display = (slots[i] && slots[i].active) ? '' : 'none';
                 } else {
-                    box.style.display = show || i < 2 ? '' : 'none';
+                    box.style.display = i < 2 ? '' : 'none';
                 }
-                if (mode !== 'local' && slots[i] && slots[i].active) box.style.display = '';
             }
         }
 
@@ -556,7 +851,7 @@
         window.addEventListener('keydown', e => {
             localKeys[e.code] = true;
             if (['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-            if (e.code === 'KeyR' && matchOver && (mode === 'local' || mode === 'host')) startNewMatch(true);
+            if (e.code === 'KeyR' && matchOver && (mode === 'local' || mode === 'practice' || mode === 'host')) startNewMatch(true);
         });
         window.addEventListener('keyup', e => { localKeys[e.code] = false; });
 
@@ -584,6 +879,50 @@
                 right: !!localKeys['KeyD'] || touchInput.right,
                 shoot: !!localKeys['Space'] || touchInput.shoot
             };
+        }
+
+        // ==================== BOT AI ====================
+        // slots[i].isBot = true for AI-controlled tanks
+        function getBotInputs(botTank, others) {
+            const inputs = emptyInputs();
+            if (!botTank.alive) return inputs;
+
+            // Nearest living enemy
+            let target = null, best = Infinity;
+            for (const o of others) {
+                if (!o || !o.alive || o.slot === botTank.slot) continue;
+                const d = Math.hypot(o.x - botTank.x, o.y - botTank.y);
+                if (d < best) { best = d; target = o; }
+            }
+            if (!target) return inputs;
+
+            const desired = Math.atan2(target.y - botTank.y, target.x - botTank.x);
+            let diff = desired - botTank.angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+
+            // Turn toward target
+            if (diff > 0.12) inputs.right = true;
+            else if (diff < -0.12) inputs.left = true;
+
+            // Drive forward when roughly facing target
+            if (Math.abs(diff) < 0.55) inputs.up = true;
+
+            // Back up if very close (avoid bumping)
+            if (best < 55 && Math.abs(diff) > 0.9) {
+                inputs.up = false;
+                inputs.down = true;
+            }
+
+            // Shoot when aimed well enough
+            if (Math.abs(diff) < 0.28 && best < 420) inputs.shoot = true;
+
+            // Slight randomness so bots aren't perfect
+            if (Math.random() < 0.02) inputs.left = !inputs.left;
+            if (Math.random() < 0.02) inputs.right = !inputs.right;
+            if (Math.random() < 0.08) inputs.shoot = false;
+
+            return inputs;
         }
 
         // ==================== NETWORK ====================
@@ -747,7 +1086,8 @@
                     scores: scores,
                     currentRound: currentRound,
                     matchOver: matchOver,
-                    activeSlots: slots.map(s => s.active)
+                    activeSlots: slots.map(s => s.active),
+                    walls: packWallGrid()
                 });
 
                 connection.on('data', data => {
@@ -788,6 +1128,7 @@
             currentRound = 1;
             gameOver = false;
             matchOver = false;
+            generateWalls();
             for (const s of slots) if (s.active) s.tank.reset();
             showGameUI('host');
             broadcastState(true);
@@ -907,6 +1248,7 @@
                 scores = data.scores || [0, 0, 0, 0];
                 currentRound = data.currentRound || 1;
                 matchOver = !!data.matchOver;
+                if (data.walls) unpackWallGrid(data.walls);
                 initSlots();
                 if (data.activeSlots) {
                     data.activeSlots.forEach((a, i) => { if (slots[i]) slots[i].active = !!a; });
@@ -938,6 +1280,7 @@
             currentRound = data.currentRound || currentRound;
             gameOver = !!data.gameOver;
             matchOver = !!data.matchOver;
+            if (data.walls) unpackWallGrid(data.walls);
             if (data.activeSlots) {
                 data.activeSlots.forEach((a, i) => {
                     if (!slots[i]) return;
@@ -953,6 +1296,8 @@
                     slots[ts.slot].tank.fromState(ts);
                 }
             }
+            // Play sounds sent by host (clients don't simulate shots/hits)
+            if (data.sfx && data.sfx.length) playSfxList(data.sfx);
             updateScoreBoard();
             updateRoundLabel();
             if (matchOver) {
@@ -989,6 +1334,9 @@
                 matchWinner = bestSlot;
             }
 
+            const sfx = pendingSfx.slice();
+            pendingSfx = [];
+
             const payload = {
                 type: 'state',
                 tanks,
@@ -998,7 +1346,9 @@
                 matchOver,
                 roundWinner,
                 matchWinner,
-                activeSlots: slots.map(s => s.active)
+                activeSlots: slots.map(s => s.active),
+                sfx,
+                walls: packWallGrid()
             };
             for (const s of slots) {
                 if (s.conn && s.conn.open) {
@@ -1023,6 +1373,8 @@
             document.getElementById('gameUI').style.display = 'none';
             document.getElementById('hostPanel').style.display = 'none';
             document.getElementById('joinPanel').style.display = 'none';
+            document.getElementById('practicePanel').style.display = 'none';
+            document.getElementById('btnPractice').style.display = 'block';
             document.getElementById('btnLocal').style.display = 'block';
             document.getElementById('btnHost').style.display = 'block';
             document.getElementById('btnJoin').style.display = 'block';
@@ -1035,10 +1387,13 @@
             mode = m;
             document.getElementById('menu').style.display = 'none';
             document.getElementById('gameUI').style.display = 'flex';
-            disconnectBtn.style.display = mode !== 'local' ? 'block' : 'none';
+            disconnectBtn.style.display = (mode === 'host' || mode === 'client') ? 'block' : 'none';
             if (mode === 'local') {
                 modeLabel.textContent = 'Local';
                 controlsInfo.innerHTML = '<div><strong>P1 Blue</strong><br>WASD + SPACE</div><div><strong>P2 Red</strong><br>Arrows + ENTER</div>';
+            } else if (mode === 'practice') {
+                modeLabel.textContent = 'Practice';
+                controlsInfo.innerHTML = '<div><strong>You are P1 Blue</strong><br>WASD / Arrows / Joystick + FIRE</div><div><strong>Bots</strong><br>AI controlled</div>';
             } else {
                 modeLabel.textContent = 'Online — You: ' + PLAYER_NAMES[mySlot];
                 controlsInfo.innerHTML = '<div><strong>You are ' + PLAYER_NAMES[mySlot] + '</strong><br>WASD / Arrows / Joystick + FIRE</div>';
@@ -1055,10 +1410,30 @@
             gameStarted = true;
             initSlots();
             slots[0].active = true;
+            slots[0].isBot = false;
             slots[1].active = true;
+            slots[1].isBot = false;
             mySlot = 0;
             startNewMatch(false);
             showGameUI('local');
+        }
+
+        function startPracticeGame(botCount) {
+            mode = 'practice';
+            gameStarted = true;
+            initSlots();
+            slots[0].active = true;
+            slots[0].isBot = false;
+            if (slots[0].tank) slots[0].tank.isBot = false;
+            mySlot = 0;
+            const n = Math.max(1, Math.min(3, botCount | 0));
+            for (let i = 1; i <= n; i++) {
+                slots[i].active = true;
+                slots[i].isBot = true;
+                if (slots[i].tank) slots[i].tank.isBot = true;
+            }
+            startNewMatch(false);
+            showGameUI('practice');
         }
 
         function startNewMatch(send) {
@@ -1071,6 +1446,8 @@
             messageEl.classList.remove('show');
             resetTouchDirs();
             touchInput.shoot = false;
+            // New random map each match (keep holes during rounds of same match)
+            if (mode !== 'client') generateWalls();
             for (const s of slots) if (s.active) s.tank.reset();
             updateScoreBoard();
             updateRoundLabel();
@@ -1106,7 +1483,7 @@
                 setTimeout(() => showMatchOver(winnerSlot), 1200);
             } else {
                 currentRound++;
-                if (mode === 'local' || mode === 'host') {
+                if (mode === 'local' || mode === 'practice' || mode === 'host') {
                     roundTransitionTimer = setTimeout(() => resetRound(), 2200);
                 }
             }
@@ -1137,6 +1514,7 @@
             } else {
                 playBtn.textContent = 'Play Again';
                 playBtn.disabled = false;
+                playBtn.style.opacity = '1';
             }
         }
         function hideMatchOverlay() {
@@ -1178,11 +1556,19 @@
             ctx.lineWidth = 1;
             for (let x = 0; x < 800; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 500); ctx.stroke(); }
             for (let y = 0; y < 500; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(800, y); ctx.stroke(); }
-            ctx.fillStyle = '#2a2a4a';
-            for (const w of walls) {
-                ctx.fillRect(w.x, w.y, w.w, w.h);
-                ctx.strokeStyle = '#3a3a6a'; ctx.lineWidth = 2;
-                ctx.strokeRect(w.x, w.y, w.w, w.h);
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (!wallGrid[r] || !wallGrid[r][c]) continue;
+                    const x = c * CELL, y = r * CELL;
+                    const isBorder = r < BORDER || r >= ROWS - BORDER || c < BORDER || c >= COLS - BORDER;
+                    ctx.fillStyle = isBorder ? '#1e1e3a' : '#2a2a4a';
+                    ctx.fillRect(x, y, CELL, CELL);
+                    if (!isBorder) {
+                        ctx.strokeStyle = '#3a3a6a';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
+                    }
+                }
             }
         }
 
@@ -1196,6 +1582,14 @@
                 const tanks = activeTanks();
                 slots[0].tank.update(getLocalP1Inputs(), tanks);
                 slots[1].tank.update(getLocalP2Inputs(), tanks);
+                for (const t of tanks) t.checkHits(tanks);
+                checkRoundEnd();
+            } else if (mode === 'practice') {
+                const tanks = activeTanks();
+                slots[0].tank.update(getMergedInputs(), tanks);
+                for (const s of activeSlots()) {
+                    if (s.isBot) s.tank.update(getBotInputs(s.tank, tanks), tanks);
+                }
                 for (const t of tanks) t.checkHits(tanks);
                 checkRoundEnd();
             } else if (mode === 'host') {
@@ -1217,8 +1611,20 @@
         }
 
         // ==================== UI ====================
+        document.getElementById('btnPractice').onclick = () => {
+            document.getElementById('btnPractice').style.display = 'none';
+            document.getElementById('btnLocal').style.display = 'none';
+            document.getElementById('btnHost').style.display = 'none';
+            document.getElementById('btnJoin').style.display = 'none';
+            document.getElementById('practicePanel').style.display = 'block';
+        };
+        document.getElementById('btnBots1').onclick = () => startPracticeGame(1);
+        document.getElementById('btnBots2').onclick = () => startPracticeGame(2);
+        document.getElementById('btnBots3').onclick = () => startPracticeGame(3);
+        document.getElementById('btnCancelPractice').onclick = () => showMenu();
         document.getElementById('btnLocal').onclick = () => startLocalGame();
         document.getElementById('btnHost').onclick = () => {
+            document.getElementById('btnPractice').style.display = 'none';
             document.getElementById('btnLocal').style.display = 'none';
             document.getElementById('btnHost').style.display = 'none';
             document.getElementById('btnJoin').style.display = 'none';
@@ -1227,6 +1633,7 @@
             setupHost();
         };
         document.getElementById('btnJoin').onclick = () => {
+            document.getElementById('btnPractice').style.display = 'none';
             document.getElementById('btnLocal').style.display = 'none';
             document.getElementById('btnHost').style.display = 'none';
             document.getElementById('btnJoin').style.display = 'none';
@@ -1259,7 +1666,7 @@
         disconnectBtn.onclick = leaveGame;
         document.getElementById('btnPlayAgain').onclick = () => {
             if (mode === 'client') return;
-            startNewMatch(true);
+            startNewMatch(mode === 'host');
         };
         document.getElementById('btnMatchMenu').onclick = leaveGame;
 
@@ -1267,6 +1674,7 @@
             try {
                 const room = (new URLSearchParams(window.location.search).get('room') || '').trim().toUpperCase();
                 if (room.length >= 4) {
+                    document.getElementById('btnPractice').style.display = 'none';
                     document.getElementById('btnLocal').style.display = 'none';
                     document.getElementById('btnHost').style.display = 'none';
                     document.getElementById('btnJoin').style.display = 'none';
