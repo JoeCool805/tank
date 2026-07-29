@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>JoeTanks - Online Multiplayer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js"></script>
     <style>
@@ -149,10 +152,21 @@
         <button class="btn secondary" id="btnJoin">Join Online Game</button>
 
         <div id="practicePanel" style="display:none; width:100%;">
-            <div class="hint" style="margin-bottom:8px; text-align:center;">How many bots?</div>
-            <button class="btn" id="btnBots1">1 Bot</button>
-            <button class="btn" id="btnBots2" style="margin-top:8px;">2 Bots</button>
-            <button class="btn" id="btnBots3" style="margin-top:8px;">3 Bots</button>
+            <div class="hint" style="margin-bottom:8px; text-align:center;">How many bots? (1–12)</div>
+            <div id="botCountGrid" style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; width:100%;">
+                <button class="btn" data-bots="1">1</button>
+                <button class="btn" data-bots="2">2</button>
+                <button class="btn" data-bots="3">3</button>
+                <button class="btn" data-bots="4">4</button>
+                <button class="btn" data-bots="5">5</button>
+                <button class="btn" data-bots="6">6</button>
+                <button class="btn" data-bots="7">7</button>
+                <button class="btn" data-bots="8">8</button>
+                <button class="btn" data-bots="9">9</button>
+                <button class="btn" data-bots="10">10</button>
+                <button class="btn" data-bots="11">11</button>
+                <button class="btn" data-bots="12">12</button>
+            </div>
             <button class="btn danger" id="btnCancelPractice" style="margin-top:12px;">Cancel</button>
         </div>
 
@@ -160,7 +174,7 @@
             <div class="room-box">
                 <div>Room Code</div>
                 <div class="room-code" id="roomCodeDisplay">----</div>
-                <div class="hint">Share code or link — game starts at 2 players</div>
+                <div class="hint">Share link, then stay on this page until friends join</div>
             </div>
             <button class="btn secondary" id="btnShareLink" style="margin-top:4px;">Copy Share Link</button>
             <div class="status" id="shareStatus" style="margin-top:6px;"></div>
@@ -179,10 +193,7 @@
 
     <div id="gameUI">
         <div class="info" id="scoreBoard">
-            <div class="player-info p0" id="scoreBox0">P1: <span id="score0">0</span></div>
-            <div class="player-info p1" id="scoreBox1">P2: <span id="score1">0</span></div>
-            <div class="player-info p2" id="scoreBox2" style="display:none;">P3: <span id="score2">0</span></div>
-            <div class="player-info p3" id="scoreBox3" style="display:none;">P4: <span id="score3">0</span></div>
+            <div id="scoreBoxes" style="display:flex; flex-wrap:wrap; gap:6px; justify-content:center;"></div>
             <div class="player-info" id="roundLabel" style="border:2px solid #00ff88;">Round 1 / 3</div>
             <div class="player-info" id="modeLabel" style="border:2px solid #666;">Local</div>
         </div>
@@ -214,12 +225,24 @@
     <script>
         const TANK_SIZE = 28, BULLET_SPEED = 7, TANK_SPEED = 2.8, ROT_SPEED = 0.055;
         const FIRE_COOLDOWN = 400, BOT_FIRE_COOLDOWN = 1200, BULLET_RADIUS = 4, WALL_THICKNESS = 20, TICK_RATE = 1000 / 30;
-        const MAX_PLAYERS = 4;
-        const PLAYER_COLORS = ['#00aaff', '#ff4444', '#44ff88', '#ffaa00'];
-        const PLAYER_NAMES = ['P1 Blue', 'P2 Red', 'P3 Green', 'P4 Orange'];
+        const MAX_PLAYERS = 13; // 1 human + up to 12 bots (practice)
+        const ONLINE_MAX = 4;   // online multiplayer still capped at 4
+        const PLAYER_COLORS = [
+            '#00aaff', '#ff4444', '#44ff88', '#ffaa00',
+            '#cc66ff', '#00e5ff', '#ff66aa', '#aaff00',
+            '#ff8800', '#6688ff', '#ff5588', '#55ffcc', '#dddd44'
+        ];
+        const PLAYER_NAMES = [
+            'P1 Blue', 'P2 Red', 'P3 Green', 'P4 Orange',
+            'P5 Purple', 'P6 Cyan', 'P7 Pink', 'P8 Lime',
+            'P9 Amber', 'P10 Indigo', 'P11 Rose', 'P12 Teal', 'P13 Gold'
+        ];
+        // Spread spawns around the map (border cells are walls)
         const SPAWNS = [
-            { x: 100, y: 120 }, { x: 700, y: 120 },
-            { x: 100, y: 380 }, { x: 700, y: 380 }
+            { x: 80, y: 80 }, { x: 720, y: 80 }, { x: 80, y: 420 }, { x: 720, y: 420 },
+            { x: 400, y: 80 }, { x: 400, y: 420 }, { x: 80, y: 250 }, { x: 720, y: 250 },
+            { x: 200, y: 80 }, { x: 600, y: 80 }, { x: 200, y: 420 }, { x: 600, y: 420 },
+            { x: 400, y: 250 }
         ];
         // Destructible wall grid (cell-based so shots can punch holes)
         const CELL = 25;
@@ -371,9 +394,9 @@
         const disconnectBtn = document.getElementById('disconnectBtn');
         const touchControls = document.getElementById('touchControls');
 
-        let scores = [0, 0, 0, 0];
-        let shotsFired = [0, 0, 0, 0];
-        let hitsLanded = [0, 0, 0, 0];
+        let scores = new Array(MAX_PLAYERS).fill(0);
+        let shotsFired = new Array(MAX_PLAYERS).fill(0);
+        let hitsLanded = new Array(MAX_PLAYERS).fill(0);
         let gameOver = false, matchOver = false, currentRound = 1;
         let roundTransitionTimer = null;
         let mode = null; // 'local' | 'host' | 'client'
@@ -731,16 +754,35 @@
         }
 
         function firstFreeSlot() {
-            for (let i = 0; i < MAX_PLAYERS; i++) if (!slots[i].active) return i;
+            // Online games only use first ONLINE_MAX slots
+            const limit = (mode === 'host' || mode === 'client') ? ONLINE_MAX : MAX_PLAYERS;
+            for (let i = 0; i < limit; i++) if (!slots[i].active) return i;
             return -1;
         }
 
+        function ensureScoreBoxes() {
+            const wrap = document.getElementById('scoreBoxes');
+            if (!wrap) return;
+            if (wrap.children.length === MAX_PLAYERS) return;
+            wrap.innerHTML = '';
+            for (let i = 0; i < MAX_PLAYERS; i++) {
+                const box = document.createElement('div');
+                box.className = 'player-info';
+                box.id = 'scoreBox' + i;
+                box.style.border = '2px solid ' + PLAYER_COLORS[i];
+                box.style.display = 'none';
+                box.innerHTML = 'P' + (i + 1) + ': <span id="score' + i + '">0</span>';
+                wrap.appendChild(box);
+            }
+        }
+
         function updateScoreBoard() {
+            ensureScoreBoxes();
             for (let i = 0; i < MAX_PLAYERS; i++) {
                 const box = document.getElementById('scoreBox' + i);
                 const el = document.getElementById('score' + i);
                 if (!box || !el) continue;
-                el.textContent = scores[i];
+                el.textContent = scores[i] || 0;
                 if (mode === 'local') {
                     box.style.display = i < 2 ? '' : 'none';
                 } else if (mode === 'practice' || mode === 'host' || mode === 'client') {
@@ -759,7 +801,7 @@
 
         function updatePlayerCountUI() {
             const el = document.getElementById('playerCountStatus');
-            if (el) el.textContent = 'Players: ' + countActive() + ' / ' + MAX_PLAYERS;
+            if (el) el.textContent = 'Players: ' + countActive() + ' / ' + ONLINE_MAX;
         }
 
         // ==================== TOUCH JOYSTICK ====================
@@ -946,7 +988,13 @@
         let hostSameCodeAttempts = 0;
         let hostKeepAliveTimer = null;
         let joinRetryCount = 0;
-        const MAX_JOIN_RETRIES = 20;
+        let joinInProgress = false;   // true while a join attempt is active
+        let joinGotWelcome = false;   // true after host accepted us
+        let joinWatchdog = null;
+        let hostWakeLock = null;
+        // ~3 minutes of retries (guest often opens link while host is still in Messages)
+        const MAX_JOIN_RETRIES = 90;
+        const JOIN_RETRY_MS = 2000;
 
         function getShareLink(code) { return GAME_BASE_URL + '?room=' + encodeURIComponent(code); }
         function generateRoomCode() {
@@ -976,13 +1024,32 @@
         }
         function startHostKeepAlive() {
             clearHostKeepAlive();
+            requestHostWakeLock();
             hostKeepAliveTimer = setInterval(() => {
-                if (mode !== 'host') { clearHostKeepAlive(); return; }
+                if (mode !== 'host') { clearHostKeepAlive(); releaseHostWakeLock(); return; }
                 if (peer && !peer.destroyed && peer.disconnected) {
                     try { peer.reconnect(); } catch (e) {}
                 }
+                // Soft ping: if peer looks dead, recreate with SAME code
+                if (peer && peer.destroyed && !gameStarted) {
+                    scheduleHostRecreate(500);
+                }
                 if (!gameStarted) updatePlayerCountUI();
-            }, 4000);
+            }, 2000);
+        }
+
+        async function requestHostWakeLock() {
+            try {
+                if (hostWakeLock) return;
+                if (navigator.wakeLock && navigator.wakeLock.request) {
+                    hostWakeLock = await navigator.wakeLock.request('screen');
+                    hostWakeLock.addEventListener('release', () => { hostWakeLock = null; });
+                }
+            } catch (e) { hostWakeLock = null; }
+        }
+        function releaseHostWakeLock() {
+            try { if (hostWakeLock) hostWakeLock.release(); } catch (e) {}
+            hostWakeLock = null;
         }
         function destroyPeer(keepRoomCode) {
             clearHostKeepAlive();
@@ -1032,7 +1099,8 @@
                 lockRoomCode(id);
                 hostSameCodeAttempts = 0;
                 document.getElementById('roomCodeDisplay').textContent = id;
-                document.getElementById('hostStatus').textContent = 'Waiting for players... (need 2 to start)';
+                document.getElementById('hostStatus').textContent =
+                    'Room open — share the link. Friends may need ~30s if you left the tab.';
                 document.getElementById('hostStatus').className = 'status success';
                 startHostKeepAlive();
             });
@@ -1129,9 +1197,10 @@
         function beginOnlineGame() {
             if (gameStarted || mode !== 'host') return;
             gameStarted = true;
-            scores = [0, 0, 0, 0];
-            shotsFired = [0, 0, 0, 0];
-            hitsLanded = [0, 0, 0, 0];
+            releaseHostWakeLock();
+            scores = new Array(MAX_PLAYERS).fill(0);
+            shotsFired = new Array(MAX_PLAYERS).fill(0);
+            hitsLanded = new Array(MAX_PLAYERS).fill(0);
             currentRound = 1;
             gameOver = false;
             matchOver = false;
@@ -1153,10 +1222,18 @@
 
         function restoreHostIfNeeded() {
             if (mode !== 'host') return;
+            requestHostWakeLock();
             const code = currentRoomCode || loadRoomFromStorage();
             if (peer && !peer.destroyed) {
                 if (peer.disconnected) {
+                    document.getElementById('hostStatus').textContent =
+                        'Back — reconnecting room ' + (code || '') + '...';
+                    document.getElementById('hostStatus').className = 'status';
                     try { peer.reconnect(); } catch (e) { scheduleHostRecreate(500); }
+                } else if (!gameStarted) {
+                    document.getElementById('hostStatus').textContent =
+                        'Room open — waiting for players (' + (code || '') + ')';
+                    document.getElementById('hostStatus').className = 'status success';
                 }
                 return;
             }
@@ -1176,11 +1253,29 @@
                 return;
             }
             lockRoomCode(code);
+            requestHostWakeLock();
             if (peer && peer.disconnected) {
                 try { peer.reconnect(); } catch (e) { scheduleHostRecreate(500); }
             }
             const link = getShareLink(code);
             const statusEl = document.getElementById('shareStatus');
+
+            // Prefer native share sheet (stays in-browser on many phones)
+            try {
+                if (navigator.share) {
+                    await navigator.share({
+                        title: 'JoeTanks',
+                        text: 'Join my JoeTanks game! Room ' + code,
+                        url: link
+                    });
+                    statusEl.textContent = 'Shared room ' + code + '. Stay on this page until they join.';
+                    statusEl.className = 'status success';
+                    return;
+                }
+            } catch (e) {
+                // user cancelled share or share failed — fall through to clipboard
+            }
+
             try {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                     await navigator.clipboard.writeText(link);
@@ -1190,7 +1285,7 @@
                     document.body.appendChild(ta); ta.select(); document.execCommand('copy');
                     document.body.removeChild(ta);
                 }
-                statusEl.textContent = 'Link copied for room ' + code + '. Come back after sending.';
+                statusEl.textContent = 'Link copied (' + code + '). Return here after sending — keep this tab open.';
                 statusEl.className = 'status success';
             } catch (e) {
                 statusEl.textContent = link;
@@ -1198,33 +1293,74 @@
             }
         }
 
+        function clearJoinWatchdog() {
+            if (joinWatchdog) { clearTimeout(joinWatchdog); joinWatchdog = null; }
+        }
+
         function setupJoin(code, isRetry) {
-            if (!isRetry) joinRetryCount = 0;
+            if (!isRetry) {
+                joinRetryCount = 0;
+                joinGotWelcome = false;
+            }
+            if (joinGotWelcome || gameStarted) return;
             code = (code || '').toUpperCase();
+            joinInProgress = true;
+            clearJoinWatchdog();
+
+            const minsLeft = Math.max(1, Math.ceil(((MAX_JOIN_RETRIES - joinRetryCount) * JOIN_RETRY_MS) / 60000));
             document.getElementById('joinStatus').textContent =
                 joinRetryCount > 0
-                    ? 'Host not found, retrying (' + joinRetryCount + '/' + MAX_JOIN_RETRIES + ')...'
-                    : 'Connecting to ' + code + '...';
+                    ? 'Waiting for host… retry ' + joinRetryCount + '/' + MAX_JOIN_RETRIES +
+                      ' (keep this page open ~' + minsLeft + ' min)'
+                    : 'Connecting to room ' + code + '…';
             document.getElementById('joinStatus').className = 'status';
+
             destroyPeer(false);
             peer = new Peer(PEER_OPTS);
+
             peer.on('open', () => {
+                if (mode !== 'client' || joinGotWelcome || gameStarted) return;
                 clientConn = peer.connect(code, { reliable: true, serialization: 'json' });
-                clientConn.on('error', () => retryJoin(code));
+
+                clientConn.on('error', () => {
+                    if (!joinGotWelcome) retryJoin(code);
+                });
                 clientConn.on('open', () => {
-                    document.getElementById('joinStatus').textContent = 'Connected! Waiting for slot...';
+                    // Data channel open — host is online. Wait for welcome; do NOT retry yet.
+                    document.getElementById('joinStatus').textContent = 'Connected to host — joining…';
                     document.getElementById('joinStatus').className = 'status success';
+                    clearJoinWatchdog();
+                    // Only if welcome never arrives, retry
+                    joinWatchdog = setTimeout(() => {
+                        if (mode === 'client' && !joinGotWelcome && !gameStarted) {
+                            retryJoin(code);
+                        }
+                    }, 8000);
                 });
                 clientConn.on('data', data => handleClientData(data));
                 clientConn.on('close', () => {
-                    showMessage('Disconnected from host');
-                    setTimeout(() => leaveGame(), 2000);
+                    if (joinGotWelcome || gameStarted) {
+                        showMessage('Disconnected from host');
+                        setTimeout(() => leaveGame(), 2000);
+                    } else if (mode === 'client') {
+                        retryJoin(code);
+                    }
                 });
-                setTimeout(() => { if (mode === 'client' && !gameStarted && mySlot === 0 && !slots[0]?.active) retryJoin(code); }, 5000);
+
+                // If connect never opens (host offline), retry
+                joinWatchdog = setTimeout(() => {
+                    if (mode === 'client' && !joinGotWelcome && !gameStarted) {
+                        retryJoin(code);
+                    }
+                }, 6000);
             });
+
             peer.on('error', err => {
-                if (err.type === 'peer-unavailable' || err.type === 'network' || err.type === 'server-error') retryJoin(code);
-                else {
+                if (joinGotWelcome || gameStarted) return;
+                if (err.type === 'peer-unavailable' || err.type === 'network' ||
+                    err.type === 'server-error' || err.type === 'socket-error') {
+                    retryJoin(code);
+                } else {
                     document.getElementById('joinStatus').textContent = 'Error: ' + (err.type || err.message);
                     document.getElementById('joinStatus').className = 'status error';
                 }
@@ -1232,25 +1368,32 @@
         }
 
         function retryJoin(code) {
-            if (mode !== 'client' || gameStarted) return;
+            if (mode !== 'client' || gameStarted || joinGotWelcome) return;
+            clearJoinWatchdog();
             joinRetryCount++;
             if (joinRetryCount > MAX_JOIN_RETRIES) {
+                joinInProgress = false;
                 document.getElementById('joinStatus').textContent =
-                    'Could not find host. Ask them to return to the game tab, then reload this link.';
+                    'Still can\'t reach host. Ask them to open JoeTanks and stay on the waiting screen, then reload this link.';
                 document.getElementById('joinStatus').className = 'status error';
                 destroyPeer(false);
                 return;
             }
-            setTimeout(() => { if (mode === 'client' && !gameStarted) setupJoin(code, true); }, 2500);
+            setTimeout(() => {
+                if (mode === 'client' && !gameStarted && !joinGotWelcome) setupJoin(code, true);
+            }, JOIN_RETRY_MS);
         }
 
         function handleClientData(data) {
             if (data.type === 'full') {
-                document.getElementById('joinStatus').textContent = 'Room is full (4/4)';
+                document.getElementById('joinStatus').textContent = 'Room is full (' + ONLINE_MAX + '/' + ONLINE_MAX + ')';
                 document.getElementById('joinStatus').className = 'status error';
                 return;
             }
             if (data.type === 'welcome') {
+                joinGotWelcome = true;
+                joinInProgress = false;
+                clearJoinWatchdog();
                 mySlot = data.slot;
                 scores = data.scores || [0, 0, 0, 0];
                 currentRound = data.currentRound || 1;
@@ -1437,7 +1580,7 @@
             slots[0].isBot = false;
             if (slots[0].tank) slots[0].tank.isBot = false;
             mySlot = 0;
-            const n = Math.max(1, Math.min(3, botCount | 0));
+            const n = Math.max(1, Math.min(12, botCount | 0));
             for (let i = 1; i <= n; i++) {
                 slots[i].active = true;
                 slots[i].isBot = true;
@@ -1449,9 +1592,9 @@
 
         function startNewMatch(send) {
             if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
-            scores = [0, 0, 0, 0];
-            shotsFired = [0, 0, 0, 0];
-            hitsLanded = [0, 0, 0, 0];
+            scores = new Array(MAX_PLAYERS).fill(0);
+            shotsFired = new Array(MAX_PLAYERS).fill(0);
+            hitsLanded = new Array(MAX_PLAYERS).fill(0);
             currentRound = 1;
             gameOver = false;
             matchOver = false;
@@ -1559,6 +1702,10 @@
 
         function leaveGame() {
             if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
+            clearJoinWatchdog();
+            joinGotWelcome = false;
+            joinInProgress = false;
+            releaseHostWakeLock();
             destroyPeer(false);
             mode = null;
             gameStarted = false;
@@ -1651,9 +1798,9 @@
             document.getElementById('btnJoin').style.display = 'none';
             document.getElementById('practicePanel').style.display = 'block';
         };
-        document.getElementById('btnBots1').onclick = () => startPracticeGame(1);
-        document.getElementById('btnBots2').onclick = () => startPracticeGame(2);
-        document.getElementById('btnBots3').onclick = () => startPracticeGame(3);
+        document.querySelectorAll('#botCountGrid [data-bots]').forEach(btn => {
+            btn.onclick = () => startPracticeGame(parseInt(btn.getAttribute('data-bots'), 10));
+        });
         document.getElementById('btnCancelPractice').onclick = () => showMenu();
         document.getElementById('btnLocal').onclick = () => startLocalGame();
         document.getElementById('btnHost').onclick = () => {
