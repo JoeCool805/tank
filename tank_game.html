@@ -251,18 +251,68 @@
         const BORDER = 1; // solid border cells
         let wallGrid = []; // wallGrid[row][col] = true if solid
 
-        function clearSpawnAreas() {
-            for (const s of SPAWNS) {
-                const cx = Math.floor(s.x / CELL);
-                const cy = Math.floor(s.y / CELL);
-                for (let dy = -2; dy <= 2; dy++) {
-                    for (let dx = -2; dx <= 2; dx++) {
-                        const c = cx + dx, r = cy + dy;
-                        if (r > BORDER - 1 && r < ROWS - BORDER && c > BORDER - 1 && c < COLS - BORDER) {
-                            if (wallGrid[r] && wallGrid[r][c] !== undefined) wallGrid[r][c] = false;
-                        }
+        function clearCellPatch(cx, cy, rad) {
+            for (let dy = -rad; dy <= rad; dy++) {
+                for (let dx = -rad; dx <= rad; dx++) {
+                    const c = cx + dx, r = cy + dy;
+                    if (r >= BORDER && r < ROWS - BORDER && c >= BORDER && c < COLS - BORDER) {
+                        if (wallGrid[r]) wallGrid[r][c] = false;
                     }
                 }
+            }
+        }
+
+        function clearSpawnAreas() {
+            // Keep some known open pockets
+            for (const s of SPAWNS) {
+                clearCellPatch(Math.floor(s.x / CELL), Math.floor(s.y / CELL), 2);
+            }
+            // Extra random clearings so random spawns have room
+            for (let i = 0; i < 8; i++) {
+                const c = BORDER + 2 + Math.floor(Math.random() * (COLS - BORDER * 2 - 4));
+                const r = BORDER + 2 + Math.floor(Math.random() * (ROWS - BORDER * 2 - 4));
+                clearCellPatch(c, r, 2);
+            }
+        }
+
+        function findRandomSpawn(occupied) {
+            const margin = 45;
+            const minDist = TANK_SIZE * 2.8;
+            const radius = TANK_SIZE / 2 + 2;
+            for (let attempt = 0; attempt < 100; attempt++) {
+                const x = margin + Math.random() * (800 - margin * 2);
+                const y = margin + Math.random() * (500 - margin * 2);
+                if (circleHitsWall(x, y, radius)) continue;
+                let ok = true;
+                for (const o of occupied) {
+                    if (Math.hypot(o.x - x, o.y - y) < minDist) { ok = false; break; }
+                }
+                if (ok) return { x, y, angle: Math.random() * Math.PI * 2 };
+            }
+            // Fallback to fixed spawn list
+            for (const s of SPAWNS) {
+                if (circleHitsWall(s.x, s.y, radius)) continue;
+                let ok = true;
+                for (const o of occupied) {
+                    if (Math.hypot(o.x - s.x, o.y - s.y) < minDist) { ok = false; break; }
+                }
+                if (ok) return { x: s.x, y: s.y, angle: Math.random() * Math.PI * 2 };
+            }
+            return { x: 100, y: 100, angle: 0 };
+        }
+
+        function resetAllTanks() {
+            const occupied = [];
+            for (const s of slots) {
+                if (!s.active || !s.tank) continue;
+                const pos = findRandomSpawn(occupied);
+                s.tank.x = pos.x;
+                s.tank.y = pos.y;
+                s.tank.angle = pos.angle;
+                s.tank.bullets = [];
+                s.tank.lastShot = 0;
+                s.tank.alive = true;
+                occupied.push(pos);
             }
         }
 
@@ -573,23 +623,25 @@
 
         class Tank {
             constructor(slot) {
-                const s = SPAWNS[slot];
                 this.slot = slot;
-                this.x = s.x; this.y = s.y;
-                this.angle = slot % 2 === 0 ? 0 : Math.PI;
-                this.color = PLAYER_COLORS[slot];
+                const pos = SPAWNS[slot % SPAWNS.length];
+                this.x = pos.x; this.y = pos.y;
+                this.angle = Math.random() * Math.PI * 2;
+                this.color = PLAYER_COLORS[slot % PLAYER_COLORS.length];
                 this.bullets = [];
                 this.lastShot = 0;
                 this.alive = true;
                 this.radius = TANK_SIZE / 2;
             }
-            reset() {
-                const s = SPAWNS[this.slot];
-                this.x = s.x; this.y = s.y;
-                this.angle = this.slot % 2 === 0 ? 0 : Math.PI;
+            reset(occupied) {
+                const pos = findRandomSpawn(occupied || []);
+                this.x = pos.x;
+                this.y = pos.y;
+                this.angle = pos.angle;
                 this.bullets = [];
                 this.lastShot = 0;
                 this.alive = true;
+                return pos;
             }
             update(inputs, others) {
                 if (!this.alive || gameOver || matchOver) return;
@@ -1145,9 +1197,10 @@
                 slots[slot].conn = connection;
                 slots[slot].inputs = emptyInputs();
                 slots[slot].tank = new Tank(slot);
-                // If joining mid-game, keep them alive for current round
+                // If joining mid-game, spawn at a random open spot
                 if (gameStarted && !matchOver) {
-                    slots[slot].tank.reset();
+                    const occupied = activeTanks().filter(t => t.slot !== slot).map(t => ({ x: t.x, y: t.y }));
+                    slots[slot].tank.reset(occupied);
                 }
                 updatePlayerCountUI();
                 updateScoreBoard();
@@ -1205,7 +1258,7 @@
             gameOver = false;
             matchOver = false;
             generateWalls();
-            for (const s of slots) if (s.active) s.tank.reset();
+            resetAllTanks();
             showGameUI('host');
             broadcastState(true);
         }
@@ -1604,7 +1657,7 @@
             touchInput.shoot = false;
             // New random map each match (keep holes during rounds of same match)
             if (mode !== 'client') generateWalls();
-            for (const s of slots) if (s.active) s.tank.reset();
+            resetAllTanks();
             updateScoreBoard();
             updateRoundLabel();
             if (mode === 'host' && send) {
@@ -1622,7 +1675,7 @@
             if (roundTransitionTimer) { clearTimeout(roundTransitionTimer); roundTransitionTimer = null; }
             gameOver = false;
             messageEl.classList.remove('show');
-            for (const s of slots) if (s.active) s.tank.reset();
+            resetAllTanks();
             updateRoundLabel();
             if (mode === 'host') broadcastState(true);
         }
