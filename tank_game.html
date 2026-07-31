@@ -1026,33 +1026,38 @@
 
         // ==================== NETWORK ====================
         const GAME_BASE_URL = 'https://joecool805.github.io/tank/tank_game.html';
+        // Use PeerJS cloud defaults + extra STUN. Custom host/path often breaks on mobile.
         const PEER_OPTS = {
-            host: '0.peerjs.com', port: 443, path: '/', secure: true, debug: 1,
-            config: { iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:global.stun.twilio.com:3478' }
-            ]}
+            debug: 1,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun.cloudflare.com:3478' }
+                ]
+            }
         };
-        const ROOM_CODE_LOCK_MS = 300000;
-        const ROOM_STORAGE_KEY = 'tank_battle_room_v1';
+        const ROOM_CODE_LOCK_MS = 600000; // 10 min
+        const ROOM_STORAGE_KEY = 'tank_battle_room_v2';
         let currentRoomCode = null;
         let hostRecreating = false;
         let hostSameCodeAttempts = 0;
         let hostKeepAliveTimer = null;
         let joinRetryCount = 0;
-        let joinInProgress = false;   // true while a join attempt is active
-        let joinGotWelcome = false;   // true after host accepted us
+        let joinInProgress = false;
+        let joinGotWelcome = false;
         let joinWatchdog = null;
         let hostWakeLock = null;
-        // ~3 minutes of retries (guest often opens link while host is still in Messages)
+        let hostPeerOpen = false;
         const MAX_JOIN_RETRIES = 90;
         const JOIN_RETRY_MS = 2000;
 
         function getShareLink(code) { return GAME_BASE_URL + '?room=' + encodeURIComponent(code); }
         function generateRoomCode() {
+            // Longer codes reduce PeerJS id collisions on the public broker
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            let code = '';
-            for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+            let code = 'JT';
+            for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
             return code;
         }
         function saveRoomToStorage(code) {
@@ -1082,12 +1087,11 @@
                 if (peer && !peer.destroyed && peer.disconnected) {
                     try { peer.reconnect(); } catch (e) {}
                 }
-                // Soft ping: if peer looks dead, recreate with SAME code
-                if (peer && peer.destroyed && !gameStarted) {
-                    scheduleHostRecreate(500);
+                if ((!peer || peer.destroyed) && !gameStarted) {
+                    scheduleHostRecreate(800);
                 }
                 if (!gameStarted) updatePlayerCountUI();
-            }, 2000);
+            }, 2500);
         }
 
         async function requestHostWakeLock() {
@@ -1105,7 +1109,7 @@
         }
         function destroyPeer(keepRoomCode) {
             clearHostKeepAlive();
-            // Close all slot connections
+            hostPeerOpen = false;
             if (slots) {
                 for (const s of slots) {
                     if (s.conn) { try { s.conn.close(); } catch (e) {} s.conn = null; }
@@ -1126,19 +1130,46 @@
 
         function setupHost(preferredCode) {
             const code = resolveHostCode(preferredCode);
-            if (peer && !peer.destroyed && peer.id === code && peer.disconnected) {
-                try { peer.reconnect(); return; } catch (e) {}
+
+            // Soft reconnect if same peer still exists
+            if (peer && !peer.destroyed && peer.id && peer.id.toUpperCase() === code) {
+                if (peer.disconnected) {
+                    try {
+                        peer.reconnect();
+                        document.getElementById('hostStatus').textContent = 'Reconnecting room ' + code + '...';
+                        return;
+                    } catch (e) { /* fall through */ }
+                } else if (hostPeerOpen) {
+                    document.getElementById('hostStatus').textContent =
+                        'Room open — waiting for players (' + code + ')';
+                    document.getElementById('hostStatus').className = 'status success';
+                    startHostKeepAlive();
+                    return;
+                }
             }
-            destroyPeer(true);
+
+            // Preserve active remote connections only if we're mid-game; otherwise rebuild lobby
+            const wasStarted = gameStarted;
+            const savedActive = wasStarted ? slots.map(s => ({
+                active: s.active, peerId: s.peerId, isBot: s.isBot
+            })) : null;
+
+            if (peer) {
+                try { peer.destroy(); } catch (e) {}
+                peer = null;
+            }
+            hostPeerOpen = false;
             hostRecreating = false;
             lockRoomCode(code);
-            initSlots();
-            // Host occupies slot 0
-            slots[0].active = true;
-            slots[0].peerId = 'host';
-            slots[0].tank = new Tank(0);
-            gameStarted = false;
-            mySlot = 0;
+
+            if (!wasStarted) {
+                initSlots();
+                slots[0].active = true;
+                slots[0].peerId = 'host';
+                slots[0].tank = new Tank(0);
+                gameStarted = false;
+                mySlot = 0;
+            }
 
             document.getElementById('roomCodeDisplay').textContent = code;
             document.getElementById('hostStatus').textContent = 'Opening room ' + code + '...';
@@ -1148,11 +1179,12 @@
             peer = new Peer(code, PEER_OPTS);
 
             peer.on('open', id => {
+                hostPeerOpen = true;
                 lockRoomCode(id);
                 hostSameCodeAttempts = 0;
                 document.getElementById('roomCodeDisplay').textContent = id;
                 document.getElementById('hostStatus').textContent =
-                    'Room open — share the link. Friends may need ~30s if you left the tab.';
+                    'Room open (' + id + '). Share link and keep this page visible.';
                 document.getElementById('hostStatus').className = 'status success';
                 startHostKeepAlive();
             });
@@ -1162,42 +1194,67 @@
             });
 
             peer.on('disconnected', () => {
+                hostPeerOpen = false;
                 if (mode === 'host' && peer && !peer.destroyed) {
-                    document.getElementById('hostStatus').textContent = 'Connection lost — reconnecting to ' + (currentRoomCode || code) + '...';
+                    document.getElementById('hostStatus').textContent =
+                        'Connection lost — reconnecting to ' + (currentRoomCode || code) + '...';
                     document.getElementById('hostStatus').className = 'status error';
                     setTimeout(() => {
-                        if (mode === 'host' && peer && !peer.destroyed) {
-                            try { peer.reconnect(); } catch (e) { scheduleHostRecreate(3000); }
-                        }
-                    }, 500);
+                        if (mode !== 'host' || !peer || peer.destroyed) return;
+                        try { peer.reconnect(); } catch (e) { scheduleHostRecreate(2500); }
+                    }, 400);
                 }
             });
 
+            peer.on('close', () => {
+                hostPeerOpen = false;
+                if (mode === 'host' && !gameStarted) scheduleHostRecreate(1500);
+            });
+
             peer.on('error', err => {
-                console.error('Host error', err.type, err);
+                console.error('Host error', err && err.type, err);
+                hostPeerOpen = false;
                 hostSameCodeAttempts++;
                 const label = currentRoomCode || code;
-                document.getElementById('hostStatus').textContent =
-                    (err.type === 'unavailable-id' ? 'Room busy, retrying ' : 'Network issue, restoring ') + label + '...';
-                document.getElementById('hostStatus').className = 'status error';
-                scheduleHostRecreate(err.type === 'unavailable-id' ? 3000 : 2000);
+                const t = err && err.type;
+                if (t === 'unavailable-id') {
+                    // Wait for broker to release the id, then retry SAME code
+                    document.getElementById('hostStatus').textContent =
+                        'Room id busy on server — retrying ' + label + ' (' + hostSameCodeAttempts + ')...';
+                    document.getElementById('hostStatus').className = 'status error';
+                    scheduleHostRecreate(3500 + Math.min(hostSameCodeAttempts, 8) * 500);
+                } else if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed') {
+                    document.getElementById('hostStatus').textContent =
+                        'Network issue — restoring room ' + label + '...';
+                    document.getElementById('hostStatus').className = 'status error';
+                    scheduleHostRecreate(2000);
+                } else {
+                    document.getElementById('hostStatus').textContent =
+                        'Error (' + (t || 'unknown') + ') — retrying ' + label + '...';
+                    document.getElementById('hostStatus').className = 'status error';
+                    scheduleHostRecreate(2500);
+                }
             });
         }
 
         function handleIncomingConnection(connection) {
-            connection.on('open', () => {
+            // PeerJS may fire 'open' before listeners are attached — handle both
+            const accept = () => {
+                if (connection.__jtAccepted) return;
+                connection.__jtAccepted = true;
+
                 const slot = firstFreeSlot();
                 if (slot < 0) {
-                    connection.send({ type: 'full' });
-                    connection.close();
+                    try { connection.send({ type: 'full' }); } catch (e) {}
+                    try { connection.close(); } catch (e) {}
                     return;
                 }
+
                 slots[slot].active = true;
                 slots[slot].peerId = connection.peer;
                 slots[slot].conn = connection;
                 slots[slot].inputs = emptyInputs();
                 slots[slot].tank = new Tank(slot);
-                // If joining mid-game, spawn at a random open spot
                 if (gameStarted && !matchOver) {
                     const occupied = activeTanks().filter(t => t.slot !== slot).map(t => ({ x: t.x, y: t.y }));
                     slots[slot].tank.reset(occupied);
@@ -1205,18 +1262,23 @@
                 updatePlayerCountUI();
                 updateScoreBoard();
 
-                connection.send({
-                    type: 'welcome',
-                    slot: slot,
-                    gameStarted: gameStarted,
-                    scores: scores,
-                    currentRound: currentRound,
-                    matchOver: matchOver,
-                    activeSlots: slots.map(s => s.active),
-                    walls: packWallGrid()
-                });
+                try {
+                    connection.send({
+                        type: 'welcome',
+                        slot: slot,
+                        gameStarted: gameStarted,
+                        scores: scores,
+                        currentRound: currentRound,
+                        matchOver: matchOver,
+                        activeSlots: slots.map(s => s.active),
+                        walls: packWallGrid()
+                    });
+                } catch (e) {
+                    console.error('welcome send failed', e);
+                }
 
                 connection.on('data', data => {
+                    if (!data) return;
                     if (data.type === 'input' && slots[slot]) {
                         slots[slot].inputs = data.inputs || emptyInputs();
                     }
@@ -1231,20 +1293,26 @@
                         if (gameStarted) broadcastState(true);
                     }
                 });
+                connection.on('error', err => {
+                    console.error('conn error slot', slot, err);
+                });
 
                 document.getElementById('hostStatus').textContent =
-                    'Players: ' + countActive() + '/4' + (gameStarted ? ' (in game)' : ' — starting soon...');
+                    'Players: ' + countActive() + '/' + ONLINE_MAX +
+                    (gameStarted ? ' (in game)' : ' — starting soon...');
                 document.getElementById('hostStatus').className = 'status success';
 
-                // Start when 2nd player joins
                 if (!gameStarted && countActive() >= 2) {
-                    setTimeout(() => beginOnlineGame(), 500);
+                    setTimeout(() => beginOnlineGame(), 400);
                 } else if (gameStarted) {
                     broadcastState(true);
                     showMessage(PLAYER_NAMES[slot] + ' joined!');
                     setTimeout(() => messageEl.classList.remove('show'), 1500);
                 }
-            });
+            };
+
+            connection.on('open', accept);
+            if (connection.open) accept();
         }
 
         function beginOnlineGame() {
@@ -1284,9 +1352,11 @@
                     document.getElementById('hostStatus').className = 'status';
                     try { peer.reconnect(); } catch (e) { scheduleHostRecreate(500); }
                 } else if (!gameStarted) {
+                    hostPeerOpen = true;
                     document.getElementById('hostStatus').textContent =
                         'Room open — waiting for players (' + (code || '') + ')';
                     document.getElementById('hostStatus').className = 'status success';
+                    startHostKeepAlive();
                 }
                 return;
             }
@@ -1313,7 +1383,6 @@
             const link = getShareLink(code);
             const statusEl = document.getElementById('shareStatus');
 
-            // Prefer native share sheet (stays in-browser on many phones)
             try {
                 if (navigator.share) {
                     await navigator.share({
@@ -1325,9 +1394,7 @@
                     statusEl.className = 'status success';
                     return;
                 }
-            } catch (e) {
-                // user cancelled share or share failed — fall through to clipboard
-            }
+            } catch (e) { /* cancelled */ }
 
             try {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1338,7 +1405,7 @@
                     document.body.appendChild(ta); ta.select(); document.execCommand('copy');
                     document.body.removeChild(ta);
                 }
-                statusEl.textContent = 'Link copied (' + code + '). Return here after sending — keep this tab open.';
+                statusEl.textContent = 'Link copied (' + code + '). Stay on this waiting screen.';
                 statusEl.className = 'status success';
             } catch (e) {
                 statusEl.textContent = link;
@@ -1356,7 +1423,9 @@
                 joinGotWelcome = false;
             }
             if (joinGotWelcome || gameStarted) return;
-            code = (code || '').toUpperCase();
+            code = (code || '').trim().toUpperCase();
+            if (!code) return;
+
             joinInProgress = true;
             clearJoinWatchdog();
 
@@ -1364,31 +1433,40 @@
             document.getElementById('joinStatus').textContent =
                 joinRetryCount > 0
                     ? 'Waiting for host… retry ' + joinRetryCount + '/' + MAX_JOIN_RETRIES +
-                      ' (keep this page open ~' + minsLeft + ' min)'
+                      ' (keep open ~' + minsLeft + ' min)'
                     : 'Connecting to room ' + code + '…';
             document.getElementById('joinStatus').className = 'status';
 
-            destroyPeer(false);
+            // Tear down previous guest peer only
+            if (clientConn) { try { clientConn.close(); } catch (e) {} clientConn = null; }
+            if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+
             peer = new Peer(PEER_OPTS);
 
             peer.on('open', () => {
                 if (mode !== 'client' || joinGotWelcome || gameStarted) return;
-                clientConn = peer.connect(code, { reliable: true, serialization: 'json' });
+                try {
+                    clientConn = peer.connect(code, { reliable: true, serialization: 'json' });
+                } catch (e) {
+                    retryJoin(code);
+                    return;
+                }
+                if (!clientConn) {
+                    retryJoin(code);
+                    return;
+                }
 
-                clientConn.on('error', () => {
+                clientConn.on('error', err => {
+                    console.error('join conn error', err);
                     if (!joinGotWelcome) retryJoin(code);
                 });
                 clientConn.on('open', () => {
-                    // Data channel open — host is online. Wait for welcome; do NOT retry yet.
-                    document.getElementById('joinStatus').textContent = 'Connected to host — joining…';
+                    document.getElementById('joinStatus').textContent = 'Connected — joining game…';
                     document.getElementById('joinStatus').className = 'status success';
                     clearJoinWatchdog();
-                    // Only if welcome never arrives, retry
                     joinWatchdog = setTimeout(() => {
-                        if (mode === 'client' && !joinGotWelcome && !gameStarted) {
-                            retryJoin(code);
-                        }
-                    }, 8000);
+                        if (mode === 'client' && !joinGotWelcome && !gameStarted) retryJoin(code);
+                    }, 10000);
                 });
                 clientConn.on('data', data => handleClientData(data));
                 clientConn.on('close', () => {
@@ -1400,22 +1478,22 @@
                     }
                 });
 
-                // If connect never opens (host offline), retry
                 joinWatchdog = setTimeout(() => {
-                    if (mode === 'client' && !joinGotWelcome && !gameStarted) {
-                        retryJoin(code);
-                    }
-                }, 6000);
+                    if (mode === 'client' && !joinGotWelcome && !gameStarted) retryJoin(code);
+                }, 7000);
             });
 
             peer.on('error', err => {
+                console.error('join peer error', err && err.type, err);
                 if (joinGotWelcome || gameStarted) return;
-                if (err.type === 'peer-unavailable' || err.type === 'network' ||
-                    err.type === 'server-error' || err.type === 'socket-error') {
+                const t = err && err.type;
+                if (t === 'peer-unavailable' || t === 'network' || t === 'server-error' ||
+                    t === 'socket-error' || t === 'socket-closed') {
                     retryJoin(code);
                 } else {
-                    document.getElementById('joinStatus').textContent = 'Error: ' + (err.type || err.message);
+                    document.getElementById('joinStatus').textContent = 'Error: ' + (t || (err && err.message) || 'unknown');
                     document.getElementById('joinStatus').className = 'status error';
+                    retryJoin(code);
                 }
             });
         }
@@ -1427,9 +1505,9 @@
             if (joinRetryCount > MAX_JOIN_RETRIES) {
                 joinInProgress = false;
                 document.getElementById('joinStatus').textContent =
-                    'Still can\'t reach host. Ask them to open JoeTanks and stay on the waiting screen, then reload this link.';
+                    'Could not reach host. Host must stay on the JoeTanks waiting screen, then reload this link.';
                 document.getElementById('joinStatus').className = 'status error';
-                destroyPeer(false);
+                if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
                 return;
             }
             setTimeout(() => {
@@ -1857,6 +1935,10 @@
         document.getElementById('btnCancelPractice').onclick = () => showMenu();
         document.getElementById('btnLocal').onclick = () => startLocalGame();
         document.getElementById('btnHost').onclick = () => {
+            if (typeof Peer === 'undefined') {
+                alert('Network library failed to load. Check your internet connection and reload.');
+                return;
+            }
             document.getElementById('btnPractice').style.display = 'none';
             document.getElementById('btnLocal').style.display = 'none';
             document.getElementById('btnHost').style.display = 'none';
@@ -1883,6 +1965,11 @@
             showMenu();
         };
         document.getElementById('btnDoJoin').onclick = () => {
+            if (typeof Peer === 'undefined') {
+                document.getElementById('joinStatus').textContent = 'Network library failed to load. Reload the page.';
+                document.getElementById('joinStatus').className = 'status error';
+                return;
+            }
             const code = document.getElementById('joinCode').value.trim().toUpperCase();
             if (code.length < 4) {
                 document.getElementById('joinStatus').textContent = 'Enter a valid room code';
